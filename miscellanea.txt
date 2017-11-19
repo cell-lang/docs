@@ -1,0 +1,206 @@
+Protocols
+
+Variables or expressions of a generic type (i.e. one that is or contains a type variable) have to observe a number of restrictions in their usage, since they could end up taking any sort of value at runtime. Among other things, they cannot be used as arguments in a function call, unless that function is itself generic. Generic functions that cannot be implemented under those constraints need to use another language construct, protocols, which is more or less the equivalent of interfaces in object-oriented languages and type classes in functional ones. As an example, here's the definition of the two-argument {{min(..)}} function and the {{Ord}} protocol in the standard library:
+
+  protocol Ord:
+    (_<_) : Ord, Ord -> Bool;
+
+  typevar O : Ord;
+
+  O min(O x, O y) = if x < y then x else y;
+
+Both arguments of {{min(..)}} are of a generic type {{O}}, but because of the {{typevar O : Ord;}} declaration, a restriction is placed on whatever type is bound to it at the call site: it has to implement all methods defined in {{Ord}} protocol. If, for example, {{min(..)}} were called with arguments of type {{String}}, there would have to be, somewhere in your code, a definition of the operator {{<}} that accepts arguments of type {{String}} and whose return value belongs to {{Bool}}. The scope of a typevar declaration is just the file it's declared in, and it doesn't affect functions that use the same type variable if they are defined in different files. Some syntactic sugar is provided for simple cases like this one: you can skip the typevar declaration altogether and use the {{Ord}} protocol directly in the signature of {{min(..)}} as if it were a normal type, and that's actually the recommended style:
+
+  Ord min(Ord x, Ord y) = if x < y then x else y;
+
+More complex cases still require the use of a typevar declaration, though. Here's an example, a function whose signature contains two distinct type variables, each of which has to implement the {{Ord}} protocol:
+
+  typevar O, P : Ord;
+
+  (O, P)* sort_pairs((O, P)* ps) =
+    sort(ps, {
+      a1, b1 = $a;
+      a2, b2 = $b;
+      return a1 < a2 or (a1 == a2 and b1 < b2);
+    });
+
+Using {{Ord}} directly in the signature of {{sort_pairs(..)}} would have been syntactic sugar for the following definition instead, which is clearly not what was intended:
+
+  typevar O : Ord;
+
+  (O, O)* sort_pairs((O, O)* ps) =
+    sort(ps, {
+      a1, b1 = $a;
+      a2, b2 = $b;
+      return a1 < a2 or (a1 == a2 and b1 < b2);
+    });
+
+Protocols can of course have any number of methods. The (largely useless) {{Elem}} protocol below for example is designed for types that can fit in any type of container, both ordered and unordered ones, while also allowing a custom notion of equality:
+
+  protocol Elem:
+    (_<_) : Ord, Ord -> Bool,
+    eq    : Ord, Ord -> Bool,
+    hash  : Ord      -> Int;
+
+In keeping with Cell's low-ceremony approach, conformance to a specific protocol is purely structural, with no explicit instance declarations. In order to have a type {{MyType}} conform to {{Elem}} all you need to do is implement the corresponding functions:
+
+  Bool (_<_)(MyType, MyType) = ...
+  Bool eq(MyType, MyType)    = ...
+  Int  hash(MyType)          = ...
+
+The same happens with the subtyping relation between protocols. {{Elem}} for example is a subtype of {{Ord}}, since the operations required by {{Ord}} (only {{<}} in this case) are a subset of those required by {{Elem}}, so a value of type {{Elem}} can be used anywhere a value of type {{Ord}} is required.
+
+Protocols can define more than one type. The protocol in the following example defines two abstract types, {{StateM}} and {{Msg}}, which are then used in {{run_all(..)}} and implemented by the concrete types {{Counter}} and {{CounterOp}} respectively:
+
+  protocol StateM, Msg:
+    run : StateM, Msg -> StateM;
+
+  StateM run_all(StateM init_state, Msg* msgs) {
+    state = init_state;
+    for m <- msgs:
+      state = run(state, m);
+    ;
+    return state;
+  }
+
+  type Counter   = counter(value: Int, updates: Int);
+  type CounterOp = incr, decr, reset;
+
+  Counter counter(Int v, Int u) = counter(value: v, updates: u);
+
+  Counter run(Counter c, CounterOp op) =
+    match (op)
+      incr  = counter(c.value + 1, c.updates + 1),
+      decr  = counter(c.value - 1, c.updates + 1),
+      reset = counter(0, c.updates + 1);
+
+
+
+Implicit arguments
+
+It's rather common for functions to need arguments that they don't use directly, but that are just passed on to other functions. These other functions may in turn need these parameters only because they too have to pass them on to other functions and so on. So sometimes a piece of information that is required only in a very specific function deep down in the call stack has to be passed around by all functions that depend on it, either directly or indirectly. This can be especially annoying when the need for these extra parameters arises when the code is being modified (as opposed to being written in the first place) since that may involve modifying the signatures of, and calls to, a lot of functions all over the code base. It also tends to affect functional languages more severely than imperative ones, since the former lack the sort of escape hatches the latter can offer, like for example global variables. Cell has a feature specially designed to ease this problem: implicit arguments. Let's start with a toy example:
+
+  type Locale = en_us, en_uk, es_es;
+
+  type Date = date(day: Nat, month: Nat, year: Nat);
+
+  type PersonData = (
+    name:           String,
+    surname:        String,
+    date_of_birth:  Date
+  );
+
+  implicit locale : Locale {
+    String format_date(Date date) {
+      fields = match (locale)
+        en_us         = (date.month, date.day, day.year),
+        en_uk | es_es = (date.day, date.month, day.year);
+      return append((_print_(f) : f <- fields), "/");
+    }
+
+    String format_person_data(PersonData p) {
+      fields = (p.name, p.surname, format_date(p.date_of_birth));
+      return append(fields, " - ");
+    }
+  }
+
+  PrintRecords(PersonData* ps) {
+    for p <- ps:
+      str = format_person_data(p, locale=:en_us);
+      Print(str & "\n");
+    ;
+  }
+
+{{format_date(..)}} and {{format_person_data(..)}} are defined inside an implicit block. All functions defined inside such a block acquire the implicit arguments that are declared after the {{implicit}} keyword. In this case there's just one argument, {{locale}}, of type {{Locale}}, but an implicit block can have any number of arguments, separated by commas:
+
+  implicit impl_arg_1 : Type1, impl_arg_2 : Type2, ... {
+    // Function definitions go here
+  }
+
+Different implicit blocks can have the same arguments, and it makes no difference whether two functions are defined in the same block or not, as long as the arguments are the same. {{format_date(..)}} and {{format_person_data(..)}} could have been defined as follow, and it would have made no difference at all:
+
+  implicit locale : Locale {
+    String format_date(Date date) {
+      fields = match (locale)
+        en_us         = (date.month, date.day, day.year),
+        en_uk | es_es = (date.day, date.month, day.year);
+      return append((_print_(f) : f <- fields), "/");
+    }
+  }
+
+  implicit locale : Locale {
+    String format_person_data(PersonData p) {
+      fields = (p.name, p.surname, format_date(p.date_of_birth));
+      return append(fields, " - ");
+    }
+  }
+
+When calling a function with implicit arguments you can always pass all of them explicitly by name, after the positional ones, as in {{format_person_data(p, locale=:en_us)}} above. Their specific order doesn't matter. But if caller and callee share a specific implicit argument (or any number of them) and their types are compatible (that is, the type in the caller is a subtype of the type in the callee) you can just ommit the argument which will be passed on automatically without any changes. That's what happens with {{format_date(p.date_of_birth)}} in {{format_person_data(..))}}.
+
+This is somewhat reminiscent of what happens in object-oriented languages with the {{this}}/{{self}} parameter, which is implicitly passed around among methods of the same class unless otherwise specified. The main differences (apart from the syntax) are the facts that in Cell you can have any number of implicit arguments, not just one, and that there's no specific relation between a function and the type of its implicit arguments.
+
+In a block of procedural code where several function calls need the same implicit arguments you can set them once and for all using the {{let}} statement. {{PrintRecords(..)}}, for instance, can be rewritten as follow:
+
+  PrintRecords(PersonData* ps) {
+    let locale = :en_us:
+      for p <- ps:
+        str = format_person_data(p);
+        Print(str & "\n");
+      ;
+    ;
+  }
+
+Here {{:en_us}} is used as a default value for the implicit argument {{locale}} in all function calls that need it inside the body of the let statement. Any number of implicit arguments can be set in a single let statement, and of course let statements can be nested:
+
+  let impl_arg_1 = value1, impl_arg_2 = value2:
+    ...
+    let impl_arg_3 = value3:
+      ...
+    ;
+    ...
+  ;
+
+
+
+Memoization
+
+Constants in Cell are automatically cached, even when they are the result of an arbitrary computation. Example:
+
+  Int* const_ints = (
+    925382, 583997, 741994, 101512, 74192,
+    336242, 173835, 234009, 697170, 123123
+  );
+
+  Int const_ints_sum {
+    sum = 0;
+    for x <- const_ints:
+      sum = sum + x;
+    ;
+    return sum;
+  }
+
+The first time the value of {{const_ints_sum}} is read the corresponding block of code is run, and its result is cached before being returned. All subsequent reads will just return the cached value.
+
+Something similar happens with functions that have no positional arguments, only implicit ones. This is better explained with a (rather contrived) example:
+
+  implicit xs : Float* {
+    Float* xs_sums = scanl(xs, $a+$b);
+
+    Float slice_avg(Int start, Int len) {
+      sums = xs_sums;
+      right_sum = sums(start-len-1);
+      left_sum = if start > 0 then sums(start-1) else 0;
+      return {right_sum - left_sum} / len;
+    }
+
+    Float* block_avgs(Int size) = ({
+        idx = i * size;
+        len = min(size, |xs| - idx - 1);
+        return slice_avg(idx, len);
+      } : i < (|xs| + size - 1) / size
+    );
+  }
+
+In the above code computing the value of {{xs_sums}} is relatively expensive, but during the entire execution of {{block_avgs(..)}} the body of {{xs_sums}} is run only once, and all subsequent calls to it just return its cached value. Memoization of the value of {{xs_sums}} is made possible by the fact that it only depends on the implicit argument {{xs}}, which never changes during the execution of {{block_avgs(..)}}. It is only after {{xs}} is either reassigned or goes out of scope that its memoized value is finally cleared from the cache. Without memoization it would be necessary to calculate {{xs_sums}} once higher up in the call stack, and then pass it around either explicitly or implicitly.
+
+What this means in practice is that when a certain piece of information depends only on the implicit arguments, and those arguments do not change during the execution of a certain block of code, you don't need to pass those additional pieces of information (like {{xs_sums}}) around, but you can just calculate them inside a function with no positional arguments. This has the effect of reducing the amount of data that needs to be passed around, thereby making implicit arguments more effective.

@@ -1,0 +1,395 @@
+The type system
+
+In most statically typed languages, whether they be procedural (like C), object-oriented (like Java) or functional (like Haskell), when you want to define your own data structures you start by defining a new type. That type definition acts as a sort of blueprint from which objects or values are created, and only once it is in place you can create instances of that specific type.
+In Cell, on the other hand, all values you can ever manipulate belong to a universal set of values that is predefined by the language and cannot be extended in any way. So the role of types is not to act as blueprints from which values are created, but to simply define subsets of that universal set in order to constrain how values are used.
+It is useful at this point to just go through a few simple examples. This is how you define a boolean type:
+
+  type Bool = true, false;
+
+The new type, {{Bool}}, contains only two values, the two (special) symbols {{true}} and {{false}}. Type names can contain both letters and numbers but not underscores, and must begin with an uppercase letter and contain at least a lowercase one. Also, when including a symbol in a type definition, there's no need to prefix it with a colon, because the only purpose of the colon is to avoid ambiguities that cannot arise in this context.
+Here are a few more type definitions, all of them defining types comprised of just symbols:
+
+  type DayOfTheWeek = monday, tuesday, wednesday, thrusday, friday, saturday, sunday;
+  type WeekEndDay   = saturday, sunday;
+  type WorkWeekDay  = monday, tuesday, wednesday, thrusday, friday;
+
+Again, each of these types contains only the symbols listed in its definition. But as you have noticed, the same symbols belong to more than one type. So this immediately begs the question, is the symbol {{sunday}} (for example) that appears in the definition of {{DayOfTheWeek}}, the same entity that appears in {{WeekEndDay}}? And the answer is yes, it's exactly the same value. Any value (not just symbols) can belong to any number of types, and there's no such thing as a "most specific type" as in OOP.
+
+Not just that, but as you can see, both {{WeekEndDay}} and {{WorkWeekDay}} are subsets of {{DayOfTheWeek}}, and the compiler will recognize them as such. That is to say, if you have, for example, a function that takes a parameter whose formal type is {{DayOfTheWeek}}, and you pass as actual argument a variable or an expression whose type is either {{WeekEndDay}} or {{WorkWeekDay}}, the typechecker will happily accept your code, because it recognizes that the type of the actual argument is a subset/subtype of the formal one.
+
+That holds true not just for simple enumeration types like the ones above, but for all sorts of types, no matter how complex they are, and that includes recursive ones as well. In other words, the name of a type is completely immaterial; to decide whether one type is a subset of another, the compiler only compares their definitions, not their names. Two types are considered equivalent if and only if they define the same (extensional) set of values, regardless of how they are defined.
+
+But as you'll have certainly realized, there's an obvious problem here. In the general case, the problem of deciding whether a type is a subset of another is undecidable. And indeed, it is pretty easy (if you do it on purpose) to come up with "weird" types that can confuse the compiler. We'll defer a discussion of all this until we have examined the type system in more detail: suffice it to say for now that undecidability does not seem to be a problem at all in practice, and that in any case the type system is safe: the failure to recognize a subtype relation between two types can cause the typechecker to reject a correct program but it will never cause it to accept an invalid one.
+
+We've already seen how to define a type that containts only symbols, which is more or less the structural equivalent of an enumeration in languages like C and C++. Here's how you define the type of all symbols:
+
+  type Symbol = <+>;
+
+The notation {{<+>}} is itself a valid type, and can be used directly in your code. The above definition only create a more syntactically palatable alias for it. It denotes the (infinite) set of all symbols.
+The set of all integer numbers is defined in a similar way:
+
+  type Int = <*..*>;
+
+Here, again, {{<*..*>}} is a valid type that can be used directly in the code, and the above definition only creates an alias for it. You can also define subsets of the set of all integers:
+
+  type Nat    = <0..*>;
+  type NzNat  = <1..*>;
+  type Neg    = <*..-1>;
+  type Byte   = <0..255>;
+  type Bit    = <0..1>;
+  type Zero   = <0..0>;
+
+{{Nat}} is the set/type of natural numbers, that is, all non-negative integers. {{NzNat}} is the set of non-zero natural numbers, that is, positive integers. {{Neg}} includes all negative integer numbers, {{Byte}} all integers that can fit into an (unsigned) byte, {{Bit}} just 0 and 1 and {{Zero}} is a singleton type that contains only 0. You're not restricted to a single range of integers. You can for example define the set of all non-zero integers:
+
+  type NzInt = <1..*>, <*..-1>;
+
+The above declaration is also totally equivalent to
+
+  type NzInt = NzNat, Neg;
+
+Since the name of the type is (conceptually at least) irrelevant. In general the comma in a type definition acts as the union operator. The following declaration defines a new type, {{MyType}}, that is the union of four other types, {{MyType1}} ... {{MyType4}}, and is therefore a supertype/superset of all of them:
+
+  type MyType = MyType1, MyType2, MyType3, MyType4;
+
+Type unions are not restricted to just "homogeneous" types. You can mix any sort of values. Example:
+
+  type Number       = Int, Float;
+  type SymbolOrByte = Symbol, <0..255>;
+  type BooleanOrBit = true, false, Bit;
+
+The last type that involves only atomic values is the set of all floating point numbers:
+
+  type Float = <!>;
+
+Unlike with symbols and integers, there's no way to define subsets of the set of floating point numbers: it's either all of them, or none at all.
+
+
+Sequence types
+
+There's a number of different ways of building types of sequence values. This is the simplest one:
+
+  type IntSeq = Int*;
+
+{{IntSeq}} comprises all sequences whose elements are integer values, including the empty sequence. The following sequence values are all elements of {{IntSeq}}:
+
+  ()
+  (1, 2, 3)
+  (-5, 10, -15, -20, 30)
+
+The notation {{Int*}} can here be used directly in your code (just like, for example, {{<0..*>}} or {{<!>}}) and that is actually the recommended style. In general, the type {{MyType*}} is the type of all sequences whose elements belong to {{MyType}}. If you want to exclude the empty sequence you just replace the asterisk with a plus sign:
+
+  type NeIntSeq = Int+;
+
+You can also define a type that contains only the empty sequence:
+
+  type EmptySeq = ();
+
+{{NeIntSeq}} is the same as {{IntSeq}} minus the empty sequence, and is therefore a subtype/subset of {{Int*}}, as is {{EmptySeq}}. Both {{Int+}} and {{()}} notations can be used directly in the code as well. {{()}} can denote, depending on the context, either the empty sequence (if it appears where an expression is expected) or the singleton type that contains only the empty sequence (if it appears where a type is expected).
+
+
+Tuple types
+
+At the value level, there's no distinction in Cell between tuples and sequences. That's because sequences can hold any kind of values. The following sequence, for example, would be represented as a tuple in languages with a more rigid type system:
+
+  ("John", "Smith", 25, false, 72.5)
+
+It is useful/necessary though to have a separate tuple type to deal with fixed-length, heterogeneous sequences like the one above. Here's a tuple type that could be used in this case:
+
+  type PersonData = (String, String, Nat, Bool, Float);
+
+The type {{PersonData}} includes only 5-element sequences whose first and second elements are strings, the third is a non-negative integer, the fourth a boolean value and the fifth a floating point number. Contrast that with the standard sequence type, which includes sequences of any length (with the possible exclusion of the empty sequence), but cannot constrain the type of the elements based on their position.
+
+
+Set types
+
+Set types are similar to sequence type. The type of the elements is written between brackets, with a {{+}} sign before it if you want to exclude the empty set:
+
+  [Int]     // All sets of integers
+  [+Byte]   // All non-empty sets of bytes
+  []        // The singleton type containing only the empty set/relation
+  [<0..9>]  // All sets containing only single-digit integers
+
+
+Binary relation types
+
+Binary relation types too are written between brackets, with the two argument types separated by a comma. A type like {{[Int, String]}} includes all the following relation values (among infinitely many others, of course):
+
+  []
+  [0, "A"]
+  [0, "A"; 1, "B"]
+
+You can exclude the empty set/relation value from your type in the same way as set types: {{[+Int, String]}} contains all the elements of {{[Int, String]}} except the empty set/relation (and is therefore a subset/subtype of {{[Int, String]}}).
+Relation types also have "polymorphic" variants: the type {{[Int, String; Symbol, Float]}}, for example, includes the following values:
+
+  []
+  [0, "A"; 1, "B"]
+  [:pi, 3.14159; :e, 2.71828]
+  [0, "A"; 1, "B"; :pi, 3.14159; :e, 2.71828]
+
+but not the following ones:
+
+  [2, 1.41421]  // Relations with Int/Float entries are not included
+  [:a, "A"]     // Relations with Symbol/String entries are not included
+
+You can of course have any number of alternatives in a polymorphic relation type:
+
+  [TypeA, TypeB; TypeC, TypeD; TypeE, TypeF; TypeG, TypeH]
+
+Polymorphic relation types may seem rather bizzare at first, but they are actually very useful (We'll see exactly why in one of the next chapters).
+
+
+Ternary relation types
+
+Ternary relation types are almost the same as binary relation types, the only difference being that they have three arguments instead of two. They too can be polymorphic and exclude the empty set/relation. A couple examples:
+
+  [String, Int, Float]
+  [+String, Int, Float; Symbol, Float*, [+Int]]
+
+
+Map types
+
+Map types are similar to binary relation types, but they only includes maps, that is, binary relations with no duplicates in the left column. They can exclude the empty relation, but they don't have polymorphic variants. A few examples:
+
+  [Int -> String]
+  [+Int -> Float]
+  [(Int, Int) -> Float*]
+
+
+Record types
+
+Just like tuples have their own type, even though at the value level they are just sequences, so records have types that are distinct from standard relation and map types, even though record values are just a subset of binary relation values. Their syntax should be self-explanatory:
+
+  type Point3D = (x: Int, y: Int, z: Int);
+  type Rect    = (left: Float, right: Float, top: Float, bottom: Float);
+  type DateRec = (day: <1..31>, month: <1..12>, year: Int);
+
+You can also tag some fields as being optional, by adding a question mark after their type. In the following type definition, for example, both {{middle_name}} and {{date_of_death}} are optional:
+
+  type PersonRecord = (
+    first_name:     String,
+    middle_name:    String?,
+    last_name:      String,
+    date_of_birth:  Date,
+    date_of_death:  Date?
+  );
+
+
+Tagged value types
+
+Finally we have tagged value types. Here are a few example:
+
+  type Distance   = meters(Float);
+  type TimeSpan   = seconds(Float);
+  type String     = string(Nat*);
+  type Date       = date((<1..31>, <1..12>, Int));
+
+  type Point      = cartesian_point((x: Float, y: Float)),
+                    polar_point((ro: Float, theta: Float));
+
+  type Rectangle  = rectangle((
+                      bottom_left: Point,
+                      width: Float,
+                      height: Float
+                    ));
+
+The same syntactic sugar provided for tagged records and tuples is available here as well. The following type definitions are completely equivalent to the ones above:
+
+  type Date       = date(<1..31>, <1..12>, Int);
+
+  type Point      = cartesian_point(x: Float, y: Float),
+                    polar_point(ro: Float, theta: Float);
+
+  type Rectangle  = rectangle(
+                      bottom_left: Point,
+                      width:       Float,
+                      height:      Float
+                    );
+
+There's also a type for values that are tagged with any symbol:
+
+  type TaggedInt    = <+>(Int);
+  type TaggedFloat  = <+>(Float);
+
+A type like {{TaggedInt}} above includes, for example, all the following values (and infinitely many more, of course):
+
+  :meters(100)
+  :miles(2)
+  :seconds(60)
+  :dollars(1000000000)
+
+
+Inline types
+
+In general, anything that can appear after the {{=}} sign in a type definition is a type in its own right, and can be used directly in the code. All the following type expressions, for example, can not only be nested inside another type expression, but also used in places like function signatures:
+
+  <+>
+  <0..9>
+  Int*
+  [+Symbol]
+  [Int, String]
+  ()
+  []
+  (x: Int, y: Int)+
+
+  // The type of all non-empty sets of non-empty
+  // sequences of Int/Float/String tuples
+  [+(Int, Float, String)+]
+
+There are three exceptions to this rule: symbols, tagged types and type unions. To turn them into standalone types, they have to be enclosed by {{<}} and {{>}}. The following, for example, are valid types:
+
+  <on, off>
+  <up, down, left, right>
+  <true>
+  <nothing>
+  <cart_point(x: Float, y: Float), polar_point(ro: Float, theta: Float)>
+  <nothing, maybe(Int)>
+
+but they wouldn't be if the {{<}} and {{>}} signs where removed. Since they are types in their own right, they can also be nested inside other types:
+
+  [String -> <Int, Float>*]
+  [String, <Int, null>*]
+  (x: <Int, Float>, y: <Int, Float>)
+
+Incidentally, take notice of the difference between these two types:
+
+  <Int, Float>*
+  <Int*, Float*>
+
+The first is the type of all sequences whose elements are either integer or floating point numbers: it includes also sequences that contain a mix of both. The second type includes sequences of only integers and sequences of only floating point numbers, but not mixed ones. The second type is obviously a subtype of the first.
+
+
+Parametric type declarations
+
+Let's say we need to define a data structure for binary trees of integer numbers. We could use the symbol {{empty_bin_tree}} to denote the empty tree, and a tagged triple composed of an integer and two subtrees for internal nodes. Our type declaration would then look like this:
+
+  type IntBinTree = empty_bin_tree,
+                    bin_tree(Int, IntBinTree, IntBinTree);
+
+To make this declaration more general, so that it could be used with values of any type, not just integers, we will need to add a parameter to it:
+
+  type BinTree[T]  = empty_bin_tree,
+                     bin_tree(Int, BinTree[T], BinTree[T]);
+
+Here {{T}} is a type variable, and {{BinTree[T]}} a parametric type. A type variables is represented by a standalone uppercase letter. To instantiate a parametric type, just replace the type variable between brackets with a normal type:
+
+  // Binary trees of integers
+  BinTree[Int]
+
+  // Binary trees of floating point numbers
+  BinTree[Float]
+
+  // Binary trees of either integer or floating point numbers
+  BinTree[<Int, Float>]
+
+  // Binary trees of triples of integers
+  BinTree[(Int, Int, Int)]
+
+A parametric type can of course have any number of type variables, not just one:
+
+  type Result[V, E] = success(V), failure(E);
+
+
+Subtyping
+
+Let's now come back to the subject of subtyping. As mentioned before, a type {{T}} is a subset/subtype of another type {{T'}} if every element of {{T}} is also an element of {{T'}}, and the two are equivalent if they are both subtypes of each other, that is, if every element of {{T}} belongs to {{T'}} and vice versa.
+The problem with using the standard mathematical notion of subset and superset to define subtyping conformance is that such notion is, in the general case, undecidable: there's no algorithm, let alone an efficient one, that can decide, for all pairs of types/sets if one is a subset of the other. When the typechecker fails to prove a valid subtype relationship it simply rejects what might otherwise be a valid program, but it never accepts an invalid one, so the system is safe, just more restrictive that it should, in theory, be.
+Luckily, it turns out that, in practice, the types that are used in normal code are simple enough that even a not particularly sofisticated typechecker has no difficulty dealing with the vast majority of cases, and it can run into trouble only in situations that are far outside the reach of any nominative, deterministic type system I know of.
+As an example of what could trip up the compiler, consider the following type definitions:
+
+  type ProbType1 = (Ta1, Tb1),
+                   (Ta1, Tb2),
+                   (Ta2, Tb1),
+                   (Ta2, Tb2);
+
+  type ProbType2 = (<Ta1, Ta2>, <Tb1, Tb2>);
+
+where {{Ta1}}, {{Ta2}}, {{Tb1}} and {{Tb2}} are types defined elsewhere. {{ProbType1}} and {{ProbType2}} are obviously the same type, but the typechecker is unable to figure that out. It can easily prove that {{ProbType1}} is a subset of {{ProbType2}}, but not the other way round. The same problem can present itself with record types:
+
+  type ProbType3 = (a: Ta1, b: Tb1),
+                   (a: Ta1, b: Tb2),
+                   (a: Ta2, b: Tb1),
+                   (a: Ta2, b: Tb2);
+
+  type ProbType4 = (a: <Ta1, Ta2>, b: <Tb1, Tb2>);
+
+Here too the compiler can figure out that {{ProbType3}} is a subset of {{ProbType4}}, but not vice versa.
+In both cases the underlying problem is that when the supertype is a union type, like so:
+
+  type SuperType = Type1, Type2, ..., TypeN;
+
+what the typechecker currently does is to compare the subtype (or each of its alternatives, if the subtype is a type union) to each of {{Type1}} ... {{TypeN}}, and give up if none of them is actually a supertype, and this naive algorithm clearly doesn't cover cases like the ones above.
+Yet in practice these situations are very easy to avoid. For instance, during the development of the Cell compiler, which is currently the largest (by far) piece of software written in Cell, only twice did the typechecker fail to recognize a valid subtype relation, and, in both cases, the issue was resolved in a couple of minutes with a minor refactoring of the type declarations involved. And even that could have been avoided by just making the compiler a little smarter (which I hope to eventually do). For now though, just avoid type declarations like these (they are simplified versions of the ones I actually had problems with):
+
+  type BadType1 = a_tag(TypeA), a_tag(TypeB);
+  type BadType2 = (field1: TypeA, field2: TypeB),
+                  (field1: TypeA, field2: TypeC);
+
+and use instead the following ones:
+
+  type GoodType1  = a_tag(<TypeA, TypeB>);
+  type GoodType2  = (field1: TypeA, field2: <TypeB, TypeC>);
+
+which are equivalent, but more typechecker-friendly, since the compiler can figure out that {{BadType1}} and {{BadType2}} are subsets of {{GoodType1}} and {{GoodType2}} (respectively), but not vice versa.
+
+
+Standard types
+
+Let's conclude this chapter with a quick review of some of the types that are defined in the standard library. Some are new, others have already been mentioned before. Let's start with atomic values:
+
+  type Symbol   = <+>;      // All symbols
+  type Int      = <*..*>;   // All integers
+  type Float    = <!>;      // All floating point numbers
+
+We've already seen them before. Some of their subsets are especially important:
+
+  type Bool   = true, false;  // Standard boolean type
+  type True   = true;         // Just the truth value
+  type False  = false;        // Just the falsehood value
+
+  type Nat    = <0..*>;   // Natural numbers (ie, non-negative integers)
+  type NzNat  = <1..*>;   // Non-zero natural numbers
+
+  type Bit    = <0..1>;   // Just 0 and 1
+  type Byte   = <0..255>; // Integers that can fit in an unsigned byte
+
+Singleton types like {{True}} and {{False}} may seem pointless at first, but they are actually pretty important (We'll see why when we discuss typechecking).
+The following is the "universal" type, the one that includes all values. It is a superset of any other type:
+
+  type Any  = Symbol,           // Symbols
+              Int,              // Integers
+              Float,            // Floating point numbers
+              Any*,             // Sequences
+              [Any],            // Sets
+              [Any, Any],       // Binary relations
+              [Any, Any, Any],  // Ternary relations
+              <+>(Any);         // Tagged values
+
+The next types are useful when writing functions that can fail to produce a result. The {{Maybe}} type is standard in any functional programming language:
+
+  type Maybe[T]   = nothing, just(T);
+
+  type Nothing    = nothing;
+  type Just[T]    = just(T);
+
+and the {{Result}} type is a slightly more capable version of it, that can return either a result or an error:
+
+  type Result[V, E] = success(V), failure(E);
+
+  type Success[V]   = success(V);
+  type Failure[E]   = failure(E);
+
+An alternative to {{Maybe}} is the {{Opt}} type. It represents the absence of value with an empty sequence, and its presence with a 1-element tuple. It may be preferrable (in some cases, at least) because standard sequence manipulation constructs and functions can be applied to it as well. Here's the definition:
+
+  type Opt[T] = (), (T);
+
+Finally we have the standard string type:
+
+  type String = string(Nat*);
+
+and the type of all 7-bit ascii strings, which is obviously a subset of {{String}}:
+
+  type Ascii = string(<0..127>*);
+
+We can also define the type of all one-character strings, and in doing so we can use those strings to represent individual characters in a type safe way:
+
+  type Char = string((Nat));

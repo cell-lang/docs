@@ -1,0 +1,574 @@
+Static automata
+
+With the functional subset of the language now out of the way, we can finally examine those constructs and features that are unique to Cell, and we'll start with the most important one, static automata. We've already gone through, in the overview, the basic principles that govern the workings of static automata, and we'll now see how they are actually defined.
+
+The first thing you need to provide in order to define a static automaton is the type of its state. An automaton instance is a sort of glorified variable, which has, at any given point in time, a value which we'll usually refer to as its state. The state of an automaton is always a record, and its type is defined with a schema definition. Here's an example, similar to something we've seen in a previous chapter:
+
+  schema Counter {
+    value:   Int = 0;
+    updates: Int = 0;
+  }
+
+The above schema definition looks a lot like a type definition, and indeed a schema can be used, with some limitations, as a normal type in function signatures. When {{Counter}} is used that way, it works exactly as if it had been defined like this:
+
+  type Counter = (value: Int, updates: Int);
+
+Schemas are essentially types, but they are augmented by extra bits of information that apply only to automata. One such piece of information is on display in the schema definition above: a default value for the initial state of the automaton. Whenever an instance of {{Counter}} is created its intial state will be {{(value: 0, updates: 0)}}, unless a different value is provided explicitly.
+
+While an instance of an automaton like {{Counter}} can be though of as a variable of a record type, whose value can be read just as if it were a normal variable, in some ways such an instance behaves more like a mutable data structure (like a {{struct}} in C or a class in an object-oriented language) with two member variables {{value}} and {{updates}} that can be modified directly inside a message handler. In the functional subset of the language we examined in the previous chapters there's a strict distinction between variables and values: variables can be updated, that is, the value they contain can change over time, but values themselves are immutable: if you have, say, a variable {{v}} that contains a record value with two fields {{x}} and {{y}} you cannot update those fields directly like you do in imperative languages: all you can do is create a mutated copy of the record in {{v}} and store that new record inside {{v}}. If the language allowed imperative updates of the form {{v.x = new_x;}} and another variable {{v'}} somewhere else in the program pointed to the same physical data structures as {{v}}, updating {{v}} would have the side effect of updating {{v'}} as well. That's what happens all the time in imperative languages of course, but preventing this kind of unrestriced side effects is quite possibly the most fundamental feature of functional programming. In the case of automata, though, the same end is achieved by different means: either by preventing (or restricting) aliasing in the first place (that's what happens with mutable relation variables, discussed below) or by making a physical copy of some of the data structures involved, which is what usually happens under the hood when you read the whole value of an automaton variable, as opposed to the value of one of its individual fields.
+
+As already mentioned in the overview, the most important feature of static automata, and of the entire language in general, is the ability to use (mutable) relation variables to encode their state. Here we need a slightly more complex example: let's say you want to build an old-fashioned chat server, that will allow users to connect from a remote computer using a command line tool like {{telnet}}. As soon as they connect they will be automatically assigned a numeric id by the server (which will be invisible to them) and they will be able to choose a (unique) username using a command of the form {{login somecutename}}. Once they're logged in they will be able to send and receive messages to and from other individual users, and will also be able to join any number of chat groups with the command {{join chatgroupname}}. Groups are managed dynamically: a group will be automatically created, if it doesn't exist already, as soon as a user tries to join it, and destroyed when the last member leaves. If you wanted to create an automaton that keeps track of usernames and the list of chat groups each user has joined, you could for instance start with something like this:
+
+  schema Logins1 {
+    usernames   : [Nat -> String] = [];
+    memberships : [Nat, String]   = [];
+  }
+
+The {{usernames}} field/variable is a map that associates each numeric user id with its corresponding username (which is a string, of course), and {{memberships}} is a binary relation that keeps track of which chat groups each user has joined, with users identified by their numeric id and groups by their name. Here's a sample value for the state of (an instance of) the {{Logins1}} automaton:
+
+  ( usernames: [
+      0 -> "tom",
+      1 -> "sara",
+      2 -> "betty",
+      3 -> "luke",
+      4 -> "clark"
+    ],
+    memberships: [
+      0, "football";
+      0, "politics";
+      2, "politics";
+      3, "football";
+      4, "football"
+    ]
+  )
+
+Alternatively, the normal relation variables {{usernames}} and {{memberships}} could be turned into mutable relation variables, as shown here:
+
+  schema Logins2 {
+    usernames(Nat, String) [key: 0];
+    memberships(Nat, String);
+  }
+
+What's the difference between {{Logins1}} and {{Logins2}}? With regards to the set of possible states they can assume, they're identical: every valid state for {{Logins1}} is also a valid state for {{Logins2}}, and vice versa. The difference lies in the operations you're allowed to perform on the relation variables {{usernames}} and {{memberships}}. With {{Logins1}} you can use them as ordinary variables, whose value can be read and passed around, and you can assign a new value to them inside a message handler, subject to a number of restriction we'll talk about later. But you cannot imperatively update the values they point to, as explained earlier. With {{Logins2}}, on the other hand, those relations can be efficiently updated in place, although of course only inside a message handler and with all the restrictions that apply. You can insert new tuples and update or delete existing ones, just like you would do with SQL in a relational database. The price to pay for such a priviledge is that mutable relation variables cannot be aliased. You cannot copy them, pass them to other functions, return them from methods, or use them to build larger composite values. The following expressions or statements, for example, are all rejected by the compiler in the case of {{Logins2}}, but are perfectly valid if applied to {{Logins1}}:
+
+  // Creating a composite value
+  (usernames, memberships)
+
+  // Passing a relation variable to a function
+  merge(usernames, other_usernames)
+
+  // Copying a relation variable
+  usernames_copy = usernames;
+
+  // Returning a relation variable from a method
+  return memberships;
+
+All you can do with mutable relation variables, apart from inserting, updating and deleting tuples, is lookups, searches and linear scans:
+
+  // Looking up a user's name given their numeric id
+  usernames(id, !!)
+
+  // Syntactic sugared version of usernames(id, !!)
+  usernames(id)
+
+  // Looking up a user's numeric id give their name
+  usernames(!!, name)
+
+  // Returns true if there's a user whose numeric identifier
+  // is <id> and whose username is <name>, false otherwise
+  usernames(id, name)
+
+  // Returns true if there's a user whose
+  // numeric id is <id>, false otherwise
+  usernames(id, *)
+
+  // Returns true if there's a user whose username
+  // is <name>, false otherwise
+  usernames(*, name)
+
+  // Retrieving all groups a given user has joined
+  [g : g <- memberships(id, ?)]
+
+  // Retrieving the ids of all users who have joined a given group
+  [id : id <- memberships(?, group_name)]
+
+  // Making a copy of the entire relation
+  [u, g : u, g <- memberships]
+
+The result of all these expressions is an ordinary value, which cannot be updated in place but can otherwise be manipulated without restrictions. In particular, if you need to copy the content of a mutable relation variable elsewhere you need to make a physical copy of it, as show in the last of the above expressions.
+
+The {{[key: 0]}} annotation to the declaration of {{usernames}} in {{Logins2}} simply declares that the first column is a key for the relation, that is, that no two tuples in {{usernames}} can have the same value for the left argument. This is the same as saying that the {{usernames}} relation is actually a map, just like it is in {{Login1}}. But in this case we can do better: not only numeric identifiers but also usernames should be unique. This can be enforced by declaring a second key for {{usernames}} as shown here:
+
+  schema Logins {
+    usernames(Nat, String) [key: 0, key: 1];
+    memberships(Nat, String);
+  }
+
+Now {{usernames}} is a bidirectional map: every numeric id is associated to a single username and vice versa. The ability to declare multiple keys is only available for mutable relation variables and not for ordinary types, at least for now. Ternary relations can also have composite keys: we'll see examples of that later.
+
+
+Data modeling
+
+It's now time to see how typical database data is modeled in Cell, and how it differs from conventional database design. In order to do so, we'll make use of a classical example that appears in every database textbook: the suppliers/parts database. The domain we're going to model consists of two entities, suppliers and parts. Each supplier is identified internally by a unique number, and has a name, an address and a phone number. Parts too are identified internally by a unique numeric id, and have an alphanumeric code (which is also unique), and a description. Each supplier sells many different parts, and each part can be sold by any number of suppliers. Parts don't have a fixed price: instead, each supplier offers them at a different price, so the price cannot be modeled as an attribute of parts, since it depends on both the supplier and the part. We also want to keep track of how many units of a given part are available from each supplier that sells it. This is how our final schema is going to look like:
+
+  type PartId     = part_id(Nat);
+  type SupplierId = supplier_id(Nat);
+
+  type Money = dollar_cents(Nat);
+
+  schema Supply {
+    next_part_id     : Nat = 0;
+    next_supplier_id : Nat = 0;
+
+    part(PartId):
+      description : String;
+
+    code(PartId, String) [key: 0, key: 1];
+
+    supplier(SupplierId):
+      name    : String,
+      address : String,
+      phone*  : String;
+
+    sells(SupplierId, PartId):
+      unit_price   : Money,
+      availability : Nat;
+  }
+
+The above schema is just a syntactic sugared version of the following one:
+
+  schema Supply {
+    // First unused numeric id for parts
+    next_part_id  : Nat = 0;
+
+    // First unused numeric id for suppliers
+    next_supplier_id : Nat = 0;
+
+    // There exists a part whose identifier is #0
+    part(PartId);
+
+    // The description of part #0 is #1
+    description(PartId, String) [key: 0];
+
+    // The code of part #0 is #1
+    code(PartId, String)  [key: 0, key: 1];
+
+    // There exists a supplier whose identifier is #0
+    supplier(SupplierId);
+
+    // The name of supplier #0 is #1
+    name(SupplierId, String)    [key: 0];
+
+    // The address of supplier #0 is #1
+    address(SupplierId, String) [key: 0];
+
+    // Supplier #0 has phone number #1
+    phone(SupplierId, String);
+
+    // Supplier #0 sells part #1
+    sells(SupplierId, PartId);
+
+    // Supplier #0 sells part #1 at price #2
+    unit_price(SupplierId, PartId, Money) [key: 0:1];
+
+    // Supplier #0 has #2 units of part #1 available
+    availability(SupplierId, PartId, Nat) [key: 0:1];
+  }
+
+We'll discuss the "unsugared" version first, and the syntactic sugar later. The first thing to notice is the two type declarations {{PartId}} and {{SupplierId}}. In a relational database (assuming of course one chooses to use surrogates ids instead of real world identifiers) both suppliers and parts would be identified by an integer number. In Cell, on the other hand, it's better to create a specific data type for each entity in the application domain. A tagged integer is usually more than enough. Parts, for example, will in our example be identified by values like {{part_id(0)}}, {{part_id(1)}} and so on. Similarly, suppliers will be identified by values of the form {{supplier_id(N)}}. When using plain integers (or strings) as surrogate ids, any specific value may be used to identify different entities at the same time: in a database, for example, you could (and generally would) end up having a supplier and a part that share the same numeric id. User-defined identifiers like {{PartId}} and {{SupplierId}}, on the hand, provide an important advantage, when used consistently: they uniquely identify the entities in your domain. {{part_id(0)}}, for example, clearly identifies a part, and cannot be confused with {{supplier_id(0)}}, even though they both contain the number {{0}}. One important practical consequence of using "typed" identifiers is the ability to have polymorphic methods and functions: you can arrange your entity identifiers hierarchically, more or less like you would with classes in OOP, and have different implementations for the same method, each of which is specific for a certain type of entity. We'll see an example of that later.
+
+Another difference between Cell and relational databases is the fact that in Cell relations are meant to be in a fully reduced form, that is, every tuple in a relation is meant to record an atomic statement about your domain. In a relational database, for example, you would probably end up creating a {{SUPPLIERS}} table with four fields: {{NUMBER}}, {{NAME}}, {{ADDRESS}} and {{PHONE}}. In Cell, instead, that information is split between one unary relation, {{supplier}}, and three binary ones: {{name}}, {{address}} and {{phone}}.
+
+Let's start with the two mutable unary relations/sets, {{part}} and {{supplier}}:
+
+  // There exists a part whose identifier is #0
+  part(PartId);
+
+  // There exists a supplier whose identifier is #0
+  supplier(SupplierId);
+
+The comments above each variable explain the informal meaning of each tuple in the relation or element in the set, (with {{#0}}, {{#1}}, {{#2}}... obviously being placeholders for the first, second, third... element in the tuple respectively): if for example {{supplier}} contains the value {{supplier_id(10)}} that simply means that there exists a supplier identified by such a value. That may seem pretty pointess (and redundant) at first, but this type of relations will form the basis for a number of integrity constraints that haven't been implemented yet. They can also be convenient in a number of situations, for example when iterating through all entities of a given type.
+
+Unary relations/sets can also be used to encode boolean attributes. If for instance we wanted to tag all parts that are out of production (instead of deleting them altogether from the database) we could define the following relation:
+
+  // Part #0 is out of production
+  out_of_prod(PartId)
+
+The binary relations {{description}}, {{name}}, {{address}} and {{phone}} are meant to encode individual attributes of the corresponding entities. The first three all have a key on the first colum, so that at most one value can be associated with each entity. {{phone}} on the other hand has no keys, so that each supplier can have more than one phone number. The integrity constraints declared here are incomplete: we would like to also enforce the fact that each supplier must have a name and an address, and that each supplier id that appears in those relations is a valid one, that is, one that is an element of {{supplier}}. Unfortunately the constraints required to do this (foreign keys being one of them) have not been implemented yet, so for now that's the best we can do.
+
+{{code}} is another relations whose purpose is to encode an attribute of parts. In this case though, the value in question has to be unique: no two parts can share the same code. This is done by creating another key on the second column of the relation.
+
+The last binary relation, {{sells}}, is what in database parlance is sometimes called an associative table (or an associative entity in the E/R model). It differs from the other binary relations in that it is meant to encode a relationship between two different entities, parts and suppliers, instead of an attribute of a specific entity. Just to be clear, it's a relation like any other: the only difference lies in what it is conceptually meant to represent. It has no keys since it encodes a many-to-many relationship: a suppliers can sell any number of parts and a part can be sold by any number of suppliers.
+
+The two ternary relations {{unit_price}} and {{availability}} model what we could think of as attributes of the {{sells}} relationship. As mentioned before, neither {{unit_price}} nor {{availability}} can be modeled as attributes of either parts or suppliers, as those quantities depend on both the part and the supplier: different suppliers might sell the same part at a different price, and they will generally have different amounts of it in stock. This is the kind of information that is somewhat awkward to model with conventional programming languages, but that can be encoded very naturally using (ternary, in this case) relations. Both relations have a composite key that consists of the first two columns, in order to ensure that the value of both attributes is unique for each combination of supplier and part.
+
+Note that in a valid dataset (that is, one that is internally consistent), the {{sells}} relation is entirely redundant, in the sense that it does not contain any information that is not already stored inside {{unit_price}} or {{availability}}: just drop the third column from either and you'll get back the exact content of {{sells}}. Now, one thing that every competent database designer takes for granted is that avoiding redundancy should be one of your top concerns when modeling data, and one of the main goals of Cell is to actually apply the very same principle to software development (we'll be spending a lot of time in what follows talking about the evils of redundancy). So why is {{sells}} there at all? The answer lies in one specific type of data inconsistency that does not affect relational databases, but which the particular flavor of the relational model used in Cell is vulnerable to. In a relational database the information that here is split between {{sells}}, {{unit_price}} and {{availability}} would be normally encoded in a single table, let's call it {{SUPPLY}}, with four fields with names like {{SUPPLIER_NO}}, {{PART_NO}}, {{UNIT_PRICE}} and {{AMOUNT_AVAILABLE}}, and everything would be fine: for every valid combination of supplier and part both unit price and availability would have to be present. But once that information is divided into atomic chunks, you could end up with a particular combination of supplier and part being accounted for in one relation (either {{unit_price}} or {{availability}}) but not in the other: if both attributes are meant to be mandatory, that would be a clear inconsistency in your dataset. In order to avoid this issue, a future version of Cell will provide an integrity constraint whose effect will be, in this particular case, to enforce the fact that for every entry in the {{sells}} relation, there must be a corresponding entry in both {{unit_price}} and {{availability}}, therefore making both attributes mandatory, and that conversely for every entry in {{unit_price}} or {{availability}} there must be a corresponding entry in {{sells}}. This yet-to-be-implemented type of constraint will essentially be a sort of bidirectional foreign key, anchored to {{sells}}, and that's why such a relation is necessary (standard foreign keys will be supported as well, by the way). The same is true for the unary relations {{supplier}} and {{part}} which, as briefly mentioned earlier, are entirely redundant in a well-formed dataset since they can be obtained by projecting the binary relations {{name}} or {{address}} (for {{supplier}}) and {{code}} or {{description}} (for {{part}}) on the first column (assuming none of those attributes is optional, of course), but which will be necessary to enforce the consistency of the data once the previously mentioned integrity constraints are implemented. Note that if you didn't need to keep track of the information stored in {{availability}}, you wouldn't need the {{sells}} relation either: the issue described here arises only when a given entity or relationship has at least two attributes.
+
+A quick note about performance: a naive implementation of this data model is, of course, not going to perform particularly well. Luckily, that's not the case for a more optimized one. Mutable binary relations can actually be implemented very efficiently, especially if they have a key, in terms of both speed and memory footprint. There are trade-offs to be made between access speed, update speed and memory consumption for mutable ternary relations, and their implementation is more complex, but they too can be made to perform just as well as informationally equivalent, hand-optimized data structures. And an efficient implementation of mutable unary relations/sets is of course trivial. This is made possible by (among other things) the strict separation that we have in Cell between the logical definition of a data structure and its physical, under-the-hood implementation. We won't go into detail yet, since the current implementation is temporary and is indeed not that efficient (all lookups and searches run in {{O(log(n))}}, where {{n}} is the number of entries in the relation), except for saying that the final data structures will essentially be (in the case of binary relations, at least) a more general version of those used in the Entity/Component architecture adopted by many videogames.
+
+Finally let's talk about syntactic sugar. The "unsweetened" version of {{Supply}} is rather verbose, and that's only going to get worse once the full suite of integrity constraints is implemented, so Cell provides some syntactic sugar to aid readability and to save a few keystrokes. Here's how you can declare the data structures needed to encode all the information about a particular entity:
+
+  entity(EntityId):
+    mandatory_attribute               : Type1,
+    optional_attribute?               : Type2,
+    mandatory_multivalued_attribute+  : Type3,
+    optional_multivalued_attribute*   : Type4;
+
+A mandatory attibute is one that must have one and only one value for each instance of the entity in question; an optional one has either a single value or none; a mandatory multivalued attribute has one or more values; and an optional multivalued attribute can have any number of values, including zero. This is how the above declaration is rewritten by the compiler:
+
+  entity(EntityId);
+  mandatory_attribute(EntityId, Type1) [key: 0];
+  optional_attribute(EntityId, Type2)  [key: 0];
+  mandatory multivalued_attribute(EntityId, Type3);
+  optional_multivalued_attribute(EntityId, Type4);
+
+Note that there's currently no difference between mandatory attributes and optional ones ({{?}}), and between mandatory multivalued attributes ({{+}}) and optional multivalued attributes ({{*}}), simply because the constraints needed to enforce that haven't been implemented yet, but this is just temporary. The very same syntactic sugar can be used for binary relationships:
+
+  relationship(Entity1Id, Entity2Id):
+    mandatory_attribute               : Type1,
+    optional_attribute?               : Type2,
+    mandatory_multivalued_attribute+  : Type3,
+    optional_multivalued_attribute*   : Type4;
+
+which is rewritten as:
+
+  relationship(Entity1Id, Entity2Id);
+  mandatory_attribute(Entity1Id, Entity2Id, Type1) [key: 0:1];
+  optional_attribute(Entity1Id, Entity2Id, Type2)  [key: 0:1];
+  mandatory_multivalued_attribute(Entity1Id, Entity2Id, Type3);
+  optional_multivalued_attribute(Entity1Id, Entity2Id, Type4);
+
+There's no syntactic sugar for unique attributes, like {{code}} in {{Supply}}, which have to be defined using the standard verbose syntax.
+
+
+Wiring static automata together
+
+Static automata are meant to be rather large data structures, storing data about many different entity types, with all their attributes and relationships. Still, once your application grows beyond a certain size, you'll want to partition the information it handles into several domains (and therefore several automata). As an example, let's say you want to create an online marketplace for used books, where anyone can register as either a buyer or a seller. In order to sell their used books sellers have to create listings: with each listing they can put up for sale any number of copies of a specific book, and buyers can choose to buy any number of copies of a book from one of the listings. There's also going to be a catalog, which is provided by the administrator of the marketplace, and cannot by edited by sellers. Here's how a toy version of the schema could look like:
+
+  type AuthorId   = author_id(Nat);
+  type BookId     = book_id(Nat);
+  type SellerId   = seller_id(Nat);
+  type BuyerId    = buyer_id(Nat);
+  type ListingId  = listing_id(Nat);
+
+  type Money = dollar_cents(Nat);
+
+  type BookCondition = new, like_new, very_good, good,
+                       has_issues(descr: String);
+
+  schema BookMarket {
+    next_author_id    : Nat = 0;
+    next_book_id      : Nat = 0;
+    next_seller_id    : Nat = 0;
+    next_buyer_id     : Nat = 0;
+    next_listing_id   : Nat = 0;
+
+    author(AuthorId):
+      name : String;
+
+    book(BookId):
+      title : String,
+      isbn  : String,
+      by+   : AuthorId,
+      listed_price : Money;
+
+    seller(SellerId):
+      name : String;
+
+    buyer(BuyerId):
+      name : String;
+
+    listing(ListingId):
+      seller_id : SellerId,
+      book_id   : BookId,
+      condition : BookCondition,
+      price     : Money,
+      amount    : NzNat;
+
+    purchased(BuyerId, ListingId, NzNat) [key: 0:1];
+  }
+
+If one wanted to somehow partition the information contained in {{BookMarket}}, one way to do it would be to split it into three domains, the first one containing information about books and authors, the second about buyers and sellers, and the last one about offerings and purchases. The first two would be standalone domains, while the last one would be conceptually dependent on the others: you can't really talk about listings and purchases without also talking about books, sellers and buyers. Here's the refactored code:
+
+  schema Publishing {
+    next_author_id : Nat = 0;
+    next_book_id   : Nat = 0;
+
+    author(AuthorId):
+      name : String;
+
+    book(BookId):
+      title : String,
+      isbn  : String,
+      by+   : AuthorId,
+      listed_price : Money;
+  }
+
+  schema Actors {
+    next_seller_id : Nat = 0;
+    next_buyer_id  : Nat = 0;
+
+    seller(SellerId):
+      name : String;
+
+    buyer(BuyerId):
+      name : String;
+  }
+
+  schema Market : Publishing, Actors {
+    next_listing_id : Nat = 0;
+
+    listing(ListingId):
+      seller_id : SellerId,
+      book_id   : BookId,
+      condition : BookCondition,
+      price     : Money,
+      amount    : NzNat;
+
+    purchased(BuyerId, ListingId, NzNat) [key: 0:1];
+  }
+
+The only thing that is new here is the reference to {{Publishing}} and {{Actors}} in the declaration of {{Market}}. It states that the information contained in the latter automaton is dependent on that contained in first two. In practice, this means that whenever you create an instance of {{Market}} you need to provide a reference to an instance of both {{Publishing}} and {{Actors}}, which methods and message handlers of {{Market}} have access to, but only in read-only mode. This wiring is static: once an automaton instance has been created, there's no way to change it. When creating those instances in Cell (as opposed to doing that from the host language in a mixed-language application) the wiring is not only fixed, but it's also entirely known at compile time. We will discuss the details later, when we talk about methods, message handlers and how automata are instantiated and used. Once foreign keys are implemented, it will also be possible to have them work across automata, that is, it will be possible to declare foreign keys from a field like {{book_id}} in {{Market}} to the {{book}} unary relation/set in {{Publishing}}. Dependencies between automata cannot be cyclical: two distinct automaton types are not allowed to reference, directly or indirectly, each other, and consequently neither are their instances. If two knowledge domains depend on each other, you'll have to merge them into a single one.
+
+Note that the above example is just meant to demonstrate automata wiring, and it should not be taken as design advice: it would never try to partition a tiny schema like {{BookMarket}} into even smaller ones, and I certainly don't recommend you do it either: as already mentioned above, schemas are meant to be large data structures, containing information about an entire knowledge domain or subdomain, not about a single conceptual entity. But in a real application such schemas would be much larger, and therefore the data would have to be partitioned in order to stay manageable: in a company like Amazon.com, for example, customer data, product catalogs and information about orders are managed by different teams and stored in different databases, each of which has dozens or even hundreds of tables.
+
+One note about terminology: in what follows I will use to terms dependant and dependee to indicate the automata involved in this kind of relationship: that is, {{Publishing}} and {{Actors}} are dependees of {{Market}}, and {{Market}} is a dependant of both {{Publishing}} and {{Actors}}.
+
+Note also that the relatioship between dependant and dependees does not fit any of the standard relationship types you have in OOP: the exact details will be explain later, but it's not inheritance, nor composition, or aggregation, or association or even delegation, although it shares some characteristics with all of them.
+
+
+Nested automata
+
+Static automata can not only be wired together, but also nested inside one another. Here's an example:
+
+  schema CounterPair {
+    counter_1 : Counter;
+    counter_2 : Counter;
+  }
+
+It defines a new automaton, {{CounterPair}}, which contains two instances the {{Counter}} automaton defined earlier. When {{CounterPair}} is instantiated, the two nested instances of {{Counter}} are automatically created as well, bound to the {{counter_1}} and {{counter_2}} fields. This is a sample value for the state of {{CounterPair}}:
+
+  ( counter_1: (value: 1, updates: 1),
+    counter_2: (value: 0, updates: 0)
+  )
+
+As you can see, the state of nested automata simply becomes part of the state of their parent, and can be updated only as part of an update of the state of their parent. We'll say more about that when we talk about updates and message handlers in the next chapter.
+Just like mutable relation variables, and automaton variables in general, nested automata cannot be aliased, that is, variables like {{counter_1}} and {{counter_2}} cannot be copied and are in general subject to the same limitations that apply to mutable relation variables. The fields/member variables of nested automata, on the other hand, can be accessed (using the familiar {{counter_1.value}} syntax) just like the fields of their parents: with no restrictions for ordinary member variables, and with all the restrictions that apply in the case of mutable relation variables.
+
+
+Methods
+
+Static automaton methods are just normal functions which are given read-only access to the current state of an automaton instance. Since the states of automaton instances are not ordinary values that can be passed around as parameters (remember, automaton variables cannot be aliased) methods have to be declared inside a {{using}} block, as shown here:
+
+  using Supply {
+    [SupplierId] lowest_price_suppliers(PartId pid) {
+      prices = [s, p : s, p <- unit_price(?, pid, ?)];
+      return [] if prices == [];
+      min_price = only(min_by([p : s, p <- prices], untag));
+      return [p : p, s <- prices, s == min_price];
+    }
+
+    [PartId, SupplierId] lowest_price_suppliers = [
+      p, s : p <- part, s <- lowest_price_suppliers(p)
+    ];
+  }
+
+A using block can contain any number of methods, and an automaton can have any number of using blocks. Method are invoked with the same syntax used in object-oriented languages: if {{a}} is an automaton variables and {{m}} is a method, it can be invoked by writing {{a.m(..)}} if {{m}} has any arguments, or {{a.m}} otherwise. The same is true of all automaton variables, including nested automata. Methods of a given automaton can of course invoke each other, with no need (and no way) to explicitly specify the target, and a reference to the automaton instance is passed along implicitly, just like the {{this}}/{{self}} argument in object-oriented languages.
+
+Methods of dependees (like {{Publishing}} and {{Actors}} for {{Market}}) are invoked just like methods of the dependant, but have lower precedence: if a method {{m(..)}} is defined both in the dependant and in one of its dependees, calls in the dependant will be bound to the dependant's version, and currently there's no way to explicitly invoke the one defined in the dependee. If {{m(..)}} is not defined in the dependant but is defined in more than one dependee, calls will be rejected as ambiguous, and at present there's no way to resolve that ambiguity. The same rules apply to member variables: a reference to a variable will be bound to the dependant's copy if such a copy exists, or to the dependee's otherwise. Similarly, if a variable is defined in more than one dependee but not in the dependant any reference to it will be rejected.
+
+Methods can freely manipulate ordinary member variables of both the automaton they're associated with and all of its dependees, but they need to adhere to the no-aliasing rule for both mutable relation variables and nested automata. We've already seen which operations can be performed on mutable relation variables and which cannot, but if you're unsure whether something is permitted or not, just try to do it: the compiler will stop you anyway if you're doing something wrong. Mutable relation variables also benefit from a little extra syntactic sugar that is not yet available for ordinary relation values. Lookup operations of the form:
+
+  address(sid, !!)
+  unit_price(sid, pid, !!)
+
+can be rewritten more concisely like so:
+
+  address(sid)
+  unit_price(sid, pid)
+
+which makes them look like function/method calls, therefore providing a uniform syntax to access both stored attributes and computed ones.
+
+
+Hierarchical classification and polymorphism
+
+Sometimes (some of) the entities in your application domain can be classified hierarchically, and we're now going to see how inheritance can be modeled in Cell. Keep in mind though that this is not the only way to do it and that the necessary support hasn't entirely materialized yet: some integrity constraints are still missing, and so is some much needed syntactic sugar.
+
+As an example, let's say we've to build a very simple payroll system for a company that pays its employees on a weekly basis. Employees are of four types: salaried employees are paid a fixed weekly salary regardless of the number of hours worked, hourly employees are paid by the hour and receive overtime pay (i.e., 1.5 times their hourly salary rate) for all hours worked in excess of 40 hours, commission employees are paid a percentage of their sales and base-salaried commission employees receive a base salary plus a percentage of their sales.
+
+The first step is to create typed identifiers for each of the four types of employees and to arrange them hierarchically:
+
+  type SalariedEmployee   = salaried_employee(Nat);
+  type HourlyEmployee     = hourly_employee(Nat);
+  type CommissionEmployee = commission_employee(Nat);
+  type BasePlusEmployee   = base_plus_employee(Nat);
+
+  type AnyCommissionEmployee = CommissionEmployee,
+                               BasePlusEmployee;
+
+  type Employee = SalariedEmployee,
+                  HourlyEmployee,
+                  CommissionEmployee,
+                  BasePlusEmployee;
+
+The type {{Employee}} is the superset of all employee types, and {{AnyCommissionEmployee}} includes all employees that earn a commission on their sales, regardless of whether they also have a base salary or not. Note that the only purpose of these datatypes is to identify employees and their types, not to carry around all information that is associated with them, which will be instead stored using relations. The following {{Workforce}} schema defines the attributes of each type of employee: some are shared among all types of employees, like {{first_name}}, {{last_name}} and {{ssn}}, others apply only to a specific type of employees, like {{weekly_salary}} for salaried employees, and finally there's a couple of attributes, {{gross_sales}} and {{commission_rate}}, that are shared by all types of employees that can earn commissions, hence the declaration of their base type {{AnyCommissionEmployee}}:
+
+  schema Workforce {
+    // Next unused employee id
+    next_employee_id : Nat = 0;
+
+    // Shared attributes of all employees
+    employee(Employee):
+      first_name  : String,
+      last_name   : String,
+      ssn         : String;
+
+    // Attributes of salaried employees
+    weekly_salary(SalariedEmployee, Money) [key: 0];
+
+    // Attributes of hourly employees
+    hourly_wage(HourlyEmployee, Money) [key: 0];
+    hours_worked(HourlyEmployee, Float) [key: 0];
+
+    // Attributes of all employees that earn commissions,
+    // including those with base salary + commissions
+    gross_sales(AnyCommissionEmployee, Money) [key: 0];
+    commission_rate(AnyCommissionEmployee, Float) [key: 0];
+
+    // Attributes of employees with base salary + commissions
+    base_salary(BasePlusEmployee, Money) [key: 0];
+  }
+
+Just to give you a quick preview of what's to come, this is how I expect the {{Workforce}} schema to look like once the relevant syntactic sugar has been implemented:
+
+  ## WARNING: SYNTACTIC SUGAR NOT IMPLEMENTED YET
+
+  schema Workforce {
+    // Next unused employee id
+    next_employee_id : Nat = 0;
+
+    // Shared attributes of all employees
+    employee(Employee):
+      first_name  : String,
+      last_name   : String,
+      ssn         : String;
+
+    // Attributes of salaried employees
+    employee(SalariedEmployee):
+      weekly_salary : Money;
+
+    // Attributes of hourly employees
+    employee(HourlyEmployee):
+      hourly_wage  : Money,
+      hours_worked : Float;
+
+    // Attributes of all employees that earn commissions,
+    // including those with base salary + commissions
+    employee(AnyCommissionEmployee):
+      gross_sales     : Money,
+      commission_rate : Float;
+
+    // Attributes of employees with base salary + commissions
+    employee(BasePlusEmployee):
+      base_salary : Money;
+  }
+
+It will be totally equivalent to the "unsweetened" definition, save for the fact that it will also include all the appropriate integrity constraints, once these have been implemented.
+
+Now we can define the polymorphic {{earnings(..)}} method, which is implemented differently for each type of employee:
+
+  using Workforce {
+    Money earnings(SalariedEmployee e) = weekly_salary(e);
+
+    Money earnings(HourlyEmployee e) {
+      hours = hours_worked(e);
+      wage = hourly_wage(e);
+      earnings = hours * wage;
+      earnings = earnings + 0.5 * {hours - 40.0} * wage if hours > 40.0;
+      return earnings;
+    }
+
+    Money earnings(CommissionEmployee e) =
+      commission_rate(e) * gross_sales(e);
+
+    Money earnings(BasePlusEmployee e) =
+      base_salary(e) + commission_rate(e) * gross_sales(e);
+  }
+
+As you can see, polymorphic methods are just like polymorphic function, except that they have access to the state of an automaton, which in this case contains the data associated with the entities they manipulate.
+
+
+Design process
+
+To conclude this chapter let's now quickly sketch out the design process for the static automata part of an application. The first step is to partition the information your application handles into a number of domains, each of which will be implemented as a static automaton, and identify all the dependencies between them, which will be then translated into dependant/dependees relationships between automata. My own preference (and advice) here is to have only a few coarse-grained domains instead of a large number of smaller ones: remember that despite some superficial similarities, static automata have very little in common with objects and classes (which indeed tend to be very fine-grained in well-designed object-oriented applications), so you should be wary of carrying over design practices developed for a very different paradigm. Instead, the closest analog I can think of in mainstream programming paradigms is the components of the Entity/Component architecture, of which there's usually just a handful in a tipical game. I suggest that you aim for that level of granularity, but of course nothing stops you from experimenting with different approaches.
+
+After that we'll need to identify all entities in the application domain, to create a specific data type for each one of them and to arrange those datatypes hierarchically if their corresponding entities lend themselves to being classified in such a way. I strongly recommend that you design those datatypes so that they only identify the corresponding entities and their types, and use relations to store their attributes, as was done in all the examples that we've seen so far, like {{PartId}}, {{SupplierId}}, {{Employee}}, {{SalariedEmployee}} and so on. Using relations instead of records to store attributes of any given type of entity (or, more generally, all information related to them) provides several very substantial advantages. Some of them should be already apparent by now, like the ability to do fast seaches on any attribute or combination of them; to have unique attributes like {{usernames}} in {{Logins}} or {{code}} in {{Supply}}; to naturally encode attributes of relationships and not just entities ({{unit_price}} and {{availability}} in {{Supply}}, or {{purchased}} in {{BookMarket}}); and of course to imperatively update their values, while retaining the benefits of pure functional programming. But we've barely scratched the surface here: we will discuss this topic more extensively in another chapter. You're of course free to use the language as you please, but bear in mind that Cell is developed around the notion that information should be encoded using relations, and that's also true for performance optimization: if you decide to plough on and use records anyway, that will work against you, performance-wise, with future versions of the compiler.
+
+The next step is to define the data types for the attributes of both entities and relationships, and this is where schema design in Cell probably differs the most from conventional database design. Here attributes can be of any user-defined type, and those types should be defined in the way that makes the most sense for each specific attribute. These user-defined types can be either application-specific ones like {{BookCondition}} in {{BookMarket}} or more generic and reusable types like {{Money}} (which was used in several examples throughout the chapter) that may even come with their own logic.
+
+There's of course some tension between the two recommendations above: using relations instead of records to store information, and using user-defined types for the arguments of those relations. As an example, which of two schemas shown below should be preferred?
+
+  schema StrategyGame {
+    enemy_unit(EnemyUnitId):
+      position_x : Int,
+      position_y : Int,
+      ...
+  }
+
+
+  type Point = point(x: Int, y: Int);
+
+  schema StrategyGame {
+    enemy_unit(EnemyUnitId):
+      position : Point,
+      ...
+  }
+
+In a case like this, I would be inclined to use a single attribute of type {{Point}} rather than two integer attributes {{position_x}} and {{position_y}}. But in that case, why stop there and not, say, merge the {{first_name}} and {{last_name}} attributes of the {{Employee}} entity in a single {{Name}} type, as demonstrated below, which is something I would very strongly object to?
+
+  type Name = name(
+    first_name:  String,
+    last_name:   String,
+    middle_name: String?
+  );
+
+  schema Workforce {
+    // Next unused employee id
+    next_employee_id : Nat = 0;
+
+    // Shared attributes of all employees
+    employee(Employee):
+      name  : Name,
+      ssn   : String;
+
+    ...
+  }
+
+Here are a few points to consider when making that decision:
+
+** First of all, remember that the issue arises only if you're dealing with (possibly tagged) non-polymorphic record types. If the attibutes in question are best modeled as a union type, then there isn't really much of a choice.
+** Is the type you're considering an "interesting" one, that is, one that comes with its own logic? {{Point}} does, to some extent. Or is it a "boring" one, like {{Name}}, that groups together several somehow related pieces of information, but has no intrinsic behaviour? In the former case, defining a complex type may well be a good idea. Otherwise, it's almost always a terrible one. If it's just plain data, relations are superior to records in every possible way.
+** Once you group together several attributes you loose the ability to perform fast searches on any one of them. In the case of {{Workforce}} and {{Name}}, for instance, merging the two simple attributes {{first_name}} and {{last_name}} into a single composite one would loose you the ability to search employees by first name only, or last name only: you would have to provide the complete value for the {{name}} attribute in order to perform an optimized search. The same goes for some integrity constraints: for instance, once a unique attribute is merged with others, it becomes impossible to declaratively enforce its uniqueness.
+** You also loose the ability to imperatively update the attributes in question individually. Once {{first_name}} and {{last_name}} are merged, only the whole {{name}} attribute can be the target of an imperative assignment, not its individual fields.
+
+That's not an exaustive list, but it should be enough to make an informed decision in the vast majority of cases.
+
+Once the previous steps have been completed, what's left is more or less normal database design, which conventional database design wisdom applies to, despite a few differences between the two flavors of the relational model. It basically boils down to three main points:
+
+** Avoid any form of redundancy at all costs. No piece of information should ever be duplicated, full stop. There's simply no reason whatsoever to do that in Cell.
+** As far as possible, do not store derived data, that is, data that can be calculated from other data that is already in your schemas. That's every bit as bad as having duplicate data, and for exactly the same reasons. Unfortunately it is, in some cases, difficult to avoid. But it should be done only as a last resort.
+** Use all the available integrity constraints to ensure the consistency of your data.
+
+The overarching goal of the above guidelines is to avoid inconsistencies in your dataset, which are dangerous because they almost invariably cause you code to misbehave.
+
+A piece of information that is duplicated, that is, stored in multiple locations, opens the door to inconsistencies: if when that particular value changes some but not all locations are updated, you'll end with an inconsistent dataset. Duplicating data is a common practice in low-level programming paradigms like OOP, and when it's done for a reason it's usually done for convenience: it may in many cases save you the trouble of traversing an object graph in search of the information you need, or even building the required access paths into it in the first place. In other cases it may be done for performance, as is for example the case with the practice of denormalizing data in relational databases in order to increase access speed. But I'm not aware of any reason to do that in Cell schemas: the data stored inside a static automata is always easy to access as there's no object graph to traverse, there aren't artificial barriers like encapsulation either, and the particular data structures that will be used in the final implementation don't require any denormalization to improve performance.
+
+Derived information poses similar problems: base and derived data can get out of sync during a buggy update. In this case though the performance issues are unfortunately all too real, and that makes it difficult to avoid storing derived data entirely. But how much of it and what pieces of it exactly you decide to store can actually make a lot of difference. Every extra piece of derived data in your schemas is a trap that you set for yourself, which you have to be careful to avoid during updates. The fewer traps you set the better, so try to reduce the amount of such data to a minimum, and choose it carefully in order to maximize the performance gains and minimize the downsides. The language is meant to eventually provide several forms of memoization that should obviate the need to store derived data in the vast majority of cases, but their implementation is not trivial and it will take some time to get there.
+
+Several other types of inconsistencies can plague your datasets, even in the absence of duplicate or derived data, but a careful use of integrity constraints can prevent at least some of them, like required information that might be missing (e.g. missing mandatory attributes); information with the wrong multiplicity (e.g. an attribute that has several values even though it's supposed to have only one); and "dangling" foreign keys. Note that without integrity constraints, Cell's flavor of the relation model is especially vulnerable to these types of inconsistencies, in a way that both record-based systems and the standard relational model are not, at least not to the same extent. Integrity constraints are still a work in progress, as explained elsewhere, but unlike memoization they will hopefully be ready relatively soon.
+
+Another undesirable consequence of having duplicate or derived data in your schema is that it makes updates more complex. A stored derived relation for instance will have to be updated every time a tuple is inserted, updated or deleted in any of the relations it depends on, and that could well be a lot of places. On top of that, efficiently updating only the part of a derived data structure that has changed is typically a lot more complex that recalculating everything from scratch. So not only your code will in all likehood have more bugs, but you'll also have more work to do, and the extra code you'll have to write is going to be especially complex.
+
+There's also a Cell-specific reason to properly design your schemas, and it's related to orthogonal persistence. Orthogonal persistence requires the ability to restore the state of an automaton using a previously-taken snapshot of the state of another automaton of the same type. But when performing a restore operation you've no guarantees of any sort about the origin of the data you're dealing with: it could have been created manually; or it could have been produced by code that is not part of your application, for example by a script that processed other data; or it could come from an earlier version of your own application; or who knows what else. The bottom line is that in order to make sure that an automaton will never enter an invalid state you cannot rely on the correctness of the code that updates it: the only defence here is to design schemas to be so tight as to rule out as many invalid states as possible.
+
+One point that I could never emphasize enough is that the design of your schemas is the wrong place to be lazy or negligent: by all means cut corners in the actual code, if you think that will give you an edge: code is complex and time-consuming and difficult to write, and even the ugliest hacks can at times be justified. But there's plenty of reasons to try hard to get your data structures right, and no reason not to do it. Unlike code, data structures are both short and easy to design and write, so you're not going to save any effort by not doing that with the due diligence, but on the other hand you've got a lot to loose, because badly designed data structures will make your code more complex, less reliable and more difficult to read and understand.

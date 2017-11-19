@@ -1,0 +1,663 @@
+Functions
+
+Functions in Cell have no side effects and are referentially transparent, but can be written in either a functional or a procedural style. We'll start with the functional style. Here are a few self-explanatory examples:
+
+  Int max(Int x, Int y) = if x >= y then x else y;
+
+  Int factorial(Int n) = if n == 0 then 1 else n * factorial(n-1);
+
+The signature of the function comes first, followed by the {{=}} sign, then an expression that forms the body of the function and a semicolon that terminates the declaration. The type of the arguments and the return type are mandatory. To compare two values for equality just use the {{==}} operator, and to check if they're different use {{!=}}. The if/then/else is a conditional expression, and can have any number of branches (note the use of the {{elif}} keyword):
+
+  < -1..1> sign(Int x) = if   x > 0  then  1
+                         elif x < 0  then -1
+                                     else  0;
+
+Functions with no arguments in a referentially transparent language are of course just constants. They are declared and referenced without using parentheses:
+
+  Float pi = 3.141592653589793;
+
+  Float circle_area(Float radius) = 2 * pi * radius ^ 2;
+
+Boolean expressions can be built using the standard logical connectors {{and}}, {{or}} and {{not}}:
+
+  Bool is_print(Int char) = char >= 32 and char <= 126;
+  Bool is_upper(Int char) = char >= 65 and char <= 90;
+  Bool is_lower(Int char) = char >= 97 and char <= 122;
+  Bool is_digit(Int char) = char >= 48 and char <= 57;
+  Bool is_alpha(Int char) = is_upper(char) or is_lower(char);
+  Bool is_punct(Int char) = char != 32 and is_print(char) and
+                            not (is_alpha(char) or is_digit(char));
+
+If an expression is not defined for some combination of values for its variables, you can use the {{undefined}} keyword:
+
+  Int factorial(Int n)  = if   n == 0 then 1
+                          elif n > 0  then n * factorial(n-1)
+                                      else undefined;
+
+{{undefined}} can be used in any context where an ordinary expression can go: but if it's ever evaluated, it throws an exception. Once an exception is thrown, there's no way to "catch" it inside functions, (only automata can recover from that) so if your program consists only of functional code the effect of evaluating {{undefined}} is to simply terminate the program.
+
+Line comments begin with either {{//}} or {{##}}. The two are equivalent, but, by convention, the former should be used for explanations, the latter for comments that require some sort of action, like a todo item, or a bug warning:
+
+  // This is a comment that explains something about a piece of code
+  // that works fine and does not require any action
+
+  ## TODO: Handle this case properly
+  ## BUG:  This code will fail if xs contains duplicates
+
+Currently there's no support for multiline comments.
+
+When symbols or tagged values are used inside expressions they have to be written with a leading {{:}} (save for {{true}} and {{false}} of course), so as to distinguish them from variables or constants in the case of symbols and function calls in the case of tagged values. That can be annoying especially when you're pasting inside your source code large chuncks of data that comes from somewhere else and which is usually written without the {{:}}, so in that case you can make use of a literal block {{ #{...} }}. Inside it you don't have to write the leading {{:}}, and you cannot access variables, constants, functions or use any other computational feature of the language. It's just data. As an example, the following two definitions of the constant {{a_large_value}} are equivalent:
+
+  Any a_large_value = (
+      :alpha,
+      :bravo,
+      :meters(200),
+      :seconds(3600),
+      [ :charlie,
+        :delta,
+        :vector_3d(0.5, 0.3, 1.2),
+        :a_tag(10, (:a, :b), [])
+      ]
+    );
+
+  Any a_large_value = #{(
+      alpha,
+      bravo,
+      meters(200),
+      seconds(3600),
+      [ charlie,
+        delta,
+        vector_3d(0.5, 0.3, 1.2),
+        a_tag(10, (a, b), [])
+      ]
+    )};
+
+We've already seen the syntax for creating sequences. Their elements can of course be arbitrary expressions. The presence of some elements can also be made conditional. In the following example, the first element is included only if {{n}} is greater than 0:
+
+  Int* nearby(Nat n) = (n - 1 if n > 0, n, n + 1);
+
+The following expressions all evaluate to true:
+
+  nearby(0) == (0, 1)
+  nearby(1) == (0, 1, 2)
+  nearby(2) == (1, 2, 3)
+
+The conditional inclusion notation applies to all collection types, in all of their syntactic forms: sequences, sets, relations, maps and records. A few examples:
+
+  [Int] nearby_set(Nat n) = [n - 1 if n > 0, n, n+1];
+
+  [Int -> Int] map_nearby(Nat n) = [
+    -1 -> n - 1 if n > 0,
+     0 -> n,
+     1 -> n + 1
+  ];
+
+  [Int, Int] bin_rel_nearby(Nat n)  = [
+    -1, n - 1 if n > 0;
+     0, n;
+     1, n + 1
+  ];
+
+  type Point = point(x: Int, y: Int, z: Int?);
+
+  Point point(Int x, Int y, Int z) = point(x: x, y: y, z: z if z != 0);
+
+
+Native collection values operations
+
+Collection values have a number of built-in operators, in addition to the user-defined operators we'll see later. To get the size of a collection value, of any kind, just enclose the expression between pipes:
+
+  |any_coll|
+
+If used on a sequence, the above expression will return its length; on a set, the number of (unique) elements it contains; and on a relation the number of unique entries.
+
+Sequences support also access by index:
+
+  a_seq(i) // Access by index
+
+With sets, the same syntax is used for membership tests:
+
+  // True if "elt" is an element of "a_set", false otherwise
+  a_set(elt)
+
+Binary relations also support partial membership tests:
+
+  // Checks whether "a_bin_rel" contains the entry "arg0, arg1"
+  a_bin_rel(arg0, arg1)
+
+  // True if there exists an entry whose first
+  // element if arg0, false otherwise
+  a_bin_rel(arg0, *)
+
+  // True if "a_bin_rel" contains an entry whose
+  // second element is "arg1", false otherwise
+  a_bin_rel(*, arg1)
+
+and lookups (but note that this syntax is temporary, it will change in a future version of the language):
+
+  // If "a_bin_rel" contains one and only one entry
+  // whose left element is equal to arg0, returns the
+  // corresponding right element. Fails otherwise.
+  a_bin_rel(arg0, !!)
+
+  // If "a_bin_rel" contains one and only one entry
+  // whose right element is equal to arg1, returns
+  // the corresponding left element. Fails otherwise
+  a_bin_rel(!!, arg1)
+
+A future version of the compiler will provide a more compact notation for the first of the above two operations:
+
+  a_map_or_bin_rel(key) // Same as a_map_or_bin_rel(key, !!)
+
+and this notation is already available for mutable relation variables defined inside static automata (we'll discuss them in the following chapters).
+
+Records support all binary relation and map operations, plus access by field and field membership test:
+
+  // Returns the value of "a_field"
+  a_record.a_field
+
+  // Return true if "a_record" has field "a_field", false otherwise
+  a_record.a_field?
+
+The dot notation can also be used with tagged records. The following code is valid, since values of type {{Point}} are actually tagged records:
+
+  type Point = point(x: Int, y: Int, z: Int?);
+
+  Int x(Point p) = p.x;
+  Int z(Point p) = if p.z? then p.z else 0;
+
+It can also be used with union types, as long as all types are records or tagged records and they all have the particular field that whose value is being looked up:
+
+  type MyUnionType = (field1: Int, field2: String),
+                     tagged_rec(field1: Float, field3: Int);
+
+  <Int, Float> get_field1(MyUnionType value) = value.field1;
+
+Ternary relations support the same native operations as binary relations, but with three arguments instead of two in the case of membership tests and lookups:
+
+  // True if "a_tern_rel" includes the triple
+  // "arg0, arg1, arg2", false otherwise
+  a_tern_rel(arg0, arg1, arg2)
+
+  // Partial membership test, any value for
+  // the middle argument will do
+  a_tern_rel(arg0, *, arg2)
+
+  // Partial membership test, any pair of values
+  // for left and right arguments will do
+  a_tern_rel(*, arg1, *)
+
+  // Look up the corresponding values in the first, second
+  // or third columns respectively, if those values exist
+  // and are unique. Fail otherwise
+  a_tern_rel(!!, arg1, arg2)
+  a_tern_rel(arg0, !!, arg2)
+  a_tern_rel(arg0, arg1, !!)
+
+
+Sequence comprehension
+
+Say you want to apply a certain operation to all elements of a sequence:
+
+  // square_all(())              == ()
+  // square_all((0, 1, 2, 3, 4)) == (0, 1, 4, 9, 16)
+  Int* square_all(Int* xs) = (x * x : x <- xs);
+
+You can access not just the value of each element of the sequence, but also their indexes:
+
+  // elem_plus_index((10, 20, 30, 40)) == (10, 21, 32, 43);
+  Int* elem_plus_index(Int* xs) = (x + i : x @ i <- xs);
+
+You can add a filter expression:
+
+  // only_nonzero_elements((2, 1, 0, 4, 0, 3)) == (2, 1, 4, 3)
+  Int* only_nonzero_elements(Int* xs) = (x : x <- xs, x != 0);
+
+If the sequence contains tuples, you can destructure them:
+
+  // sum_triples(((1, 2, 3), (4, 5, 6), (7, 8, 9))) == (6, 15, 24)
+  Int* sum_triples((Int, Int, Int)* ts) = (x + y + z : x, y, z <- ts);
+
+And you can of course combine all the above features:
+
+  // weird_function(((2, 4), (5, 2), (3, 1), (7, 4), (2, 6))
+  //   ==
+  // (8, 10, 14)
+  Int* weird_function((Int, Int)* ts) = (
+    2 * max(x, y) : x, y @ i <- ts, x > i and y > i
+  );
+
+You can also build a sequence by iterating over a range of integers instead:
+
+  // rotate_left((100, 101, 102, 103, 104), 2)
+  //   ==
+  // (102, 103, 104, 100, 101)
+  Int* rotate_left(Int* seq, Int shift) = (
+    seq(mod(i+shift, |seq|)) : i < |seq|
+  );
+
+The index variable {{i}} goes from 0 to {{|seq|-1}}. You can include the last value by using {{<=}} instead of {{<}}:
+
+  // insert_right((100, 101, 102), 103) == (100, 101, 102, 103)
+  Int* insert_right(Int* seq, Int elt) = (
+    if i == |seq| then elt else seq(i) : i <= |seq|
+  );
+
+Note that the above example (and many of those that follow) is just that, an example, and not the recommended way to write that function. The following implementation is logically equivalent, but a lot more efficient (when used properly, it runs in amortized O(1)):
+
+  Int* insert_right(Int* seq, Int elt) = (seq | elt);
+
+(Of course, there's no point in defining such a function, since it's just easier to use the {{(xs | x)}} notation directly). We'll say more about functional concatenation in the next chapter, when we talk about imperative programming.
+
+
+Set/relation/map comprehension
+
+Comprehension can be applied to sets and relations as well. It's similar but a bit more complex. You can have multiple source expressions, multiple filters and more. Let's start by creating functions that merge two sets of values:
+
+  [T] set_union([T] set1, [T] set2) = [x : x <- set1 | x <- set2];
+
+The source expression {{x <- set1 | x <- set2}} iterates through all the elements of both {{set1}} and {{set2}}. The iteraction is done in an unspecified order (since sets and relations are unordered collections), and all duplicates in the result are of course eliminated. Any single-letter uppercase symbol like the {{T}} that appears in the signature of {{set_union()}} is a type variables that can represent any type. Type variables are used for generic programming, and they are needed to preserve type information: if the above function is used, for instance, to merge two sets of integers, the typechecker will be able to figure out that the result, too, will be a set of integers. We'll discuss them in detail in another chapter. Merging relations is very similar:
+
+  [A, B] bin_rel_union([A, B] r1, [A, B] r2) = [
+    x, y : x, y <- r1 | x, y <- r2
+  ];
+
+  [A, B, C] tern_rel_union([A, B, C] r1, [A, B, C] r2) = [
+    x, y, z : x, y, z <- r1 | x, y, z <- r2
+  ];
+
+Maps have a specific form of comprehension, that works in exactly the same way as binary relation comprehension, but will refuse to produce values that are not maps: if the resulting relation has duplicate keys, the computation will just fail. The only syntactic difference is that the comma between the two expression before the {{:}} is replaced with a {{->}}. Here's how you define the map version of union:
+
+  [A -> B] map_union([A -> B] m1, [A -> B] m2) = [
+    x -> y : x, y <- m1 | x, y <- m2
+  ];
+
+You can also define a function that can merge any number of sets:
+
+  [T] sets_union([[T]] sets) = [x : s <- sets, x <- s];
+
+The above function iterates through all the sets in {{sets}}, and for each set, it iterates through all the elements. You can of course define similar functions for relations or maps.
+This is a function that generates a binary relation that is the cartesian product of two sets:
+
+  [A, B] cartesian_product([A] s1, [B] s2) = [
+    x, y : x <- s1, y <- s2
+  ];
+
+The function iterates through all the elements in the first set and, for each of them, it iterates through the elements of the second set, and it ends up producing all the combinations.
+
+Set/relation comprehension expressions can iterate through sequences as well. The following function turns a sequence into a set:
+
+  [T] set(T* s) = [x : x <~ s];
+
+When the source is a sequence, rather than a set or a relations, you need to use the {{<~}} arrow instead of {{<-}} and the same index variable and tuple destructuring functionalities that we saw for sequence comprehension are available. An example:
+
+  [Nat, A, B] pair_seq_to_indexed_tern_rel((A, B)* seq) = [
+    i, x, y : x, y @ i <~ seq
+  ];
+
+Just like with sequences we can have filter clauses, but here we can have more than one and they can be intermixed with generators. The following function produces the cartesian product of two sets of integers, but it filters out all negative integers from either set:
+
+  [Int, Int] cart_prod_non_neg([Int] xs, [Int] ys) = [
+    x, y : x <- xs, x >= 0, y <- ys, y >=0
+  ];
+
+You can also calculate a new value and assign it to a variable inside the loop. The following expression iterates through all the elements of {{xs}}, stores the value of {{f(x)}} in {{y}}, skips the iteraction when {{p(y)}} is false, and finally inserts the value of {{g(x, y)}} in the output set.
+
+  [g(x, y) : x <- xs, y = f(x), p(y)]
+
+There's one more type of clause that you can use in set/relation comprehension expression, but we'll defer its discussion until we've examined pattern matching.
+
+You can also iterate through a projection of a relation, that is, a subset of it obtained by filtering it based on the value of some of the arguments. The following pairs of expressions are all equivalent, but the ones that are not commented out are a lot faster, because they don't need to do a linear scan of the entire relation:
+
+  // [y : x, y <- bin_rel, x == x0]
+  [y : y <- bin_rel(x0, ?)]
+
+  // [x : x, y <- bin_rel, y == y0]
+  [x : x <- bin_rel(?, y0)]
+
+  // [y, z : x, y, z <- tern_rel, x == x0]
+  [y, z : y, z <- tern_rel(x0, ?, ?)]
+
+  // [x, z : x, y, z <- tern_rel, y == y0]
+  [x, y : x, z <- tern_rel(?, y0, ?)]
+
+  // [x, y : x, y, z <- tern_rel, z == z0]
+  [x, y : x, y <- tern_rel(?, ?, z0)]
+
+  // [x : x, y, z <- tern_rel, y == y0, z == z0]
+  [x : x <- tern_rel(?, y0, z0)]
+
+  // [y : x, y, z <- tern_rel, x == x0, z == z0]
+  [y : y <- tern_rel(x0, ?, z0)]
+
+  // [z : x, y, z <- tern_rel, x == x0, y == x0]
+  [z : z <- tern_rel(x0, y0, ?)]
+
+
+Existential checks
+
+If you need to check whether a set contains an element that satisfies a given predicate, you can do it like this:
+
+  // Returns true if and only if there's an
+  // element {{x}} of {{xs}} such that {{p(x)}} is true
+  (x <- xs : p(x))
+
+The above expressions iterates through the elements of {{xs}}, and for each of them it evaluates the boolean expression on the right of the column ({{p(x)}} in this case). If the expression evaluates to true, the loop is terminated and the overall expression evaluates to true. If no element in the set satisfies the predicate on the right, the overall expression evaluates to false.
+
+The clause on the left can contains anything that can appear on the right of the column in a set/relation comprehension expression. A few examples:
+
+  // Evaluates to true if and only if the binary relation
+  // {{r}} contains a pair {{x, y}} such that {{p(x, y)}} is true
+  (x, y <- r : p(x, y))
+
+  // Evaluates to true if and only if there's an
+  // element {{x}} of {{xs}} and an element {{y}} of {{ys}}
+  // such that {{p(x)}} and {{q(x, y)}} are both true
+  (x <- xs, p(x), y <- ys : q(x, y))
+
+  // Evaluates to true if and only if the sequence {{xs}} contains
+  // an element {{x}} at index {{i}} such that {{p(x, i)}} is true
+  (x @ i <~ xs : p(x, i))
+
+Note that the iteration order is specified only when the iterating through a sequence (it's the obvious one, from the first element to the last), while it's implementation-defined when iterating through the elements of an unordered collection (that is, a set or a relation), and this may introduce some nondeterminism in the language if the predicate on the right can fail and throw an exception, so even though the evaluation of this expression terminates as soon as the boolean expression on the right evaluates to true, you can rely on this behaviour only when dealing with sequences.
+
+
+Operators
+
+This is the list of all cell operators, in order of decreasing precedence:
+
+{#{cpp/ops-prec.html}#}
+
+Note that there are two versions of the {{-}} operator, the unary and binary ones.
+All binary operators associate from left to right, except for those that don't associate at all: {{^}}, {{==}}, {{!=}} and {{::}}.
+The arithmetic and comparison operators {{+}} {{-}} {{*}} {{/}} {{<}} {{>}} {{<=}} {{>=}} have the obvious meanings, and are defined for any combination of integers and floating point numbers. The binary {{-}} is also used to denote set difference. The exponentiation operator {{^}} is too defined for any combination of integers and floating point numbers, but it always returns a floating point number.
+The {{::}} operator is used to test if a value belongs to a type, and returns a boolean value:
+
+  // True if the value of "my_var" belongs to "MyType", false otherwise
+  my_var :: MyType
+
+The operator {{&}} is defined as concatenation for sequences and strings, union for sets and merge for maps. In the case of maps it fails if the two maps have common keys (unless those duplicate keys map to the same values).
+
+The following operators can be overloaded: {{+}}, {{-}}, {{*}}, {{/}}, {{^}}, {{<}}, {{>}}, {{<=}}, {{>=}}, {{&}}, {{[]}}. In order to overload them, they have to be treated like normal functions with the following names:
+
+{#{cpp/ops-fn-names.html}#}
+
+The function names are formed by the operator itself, with underscores where the operands should be, all enclosed in parentheses. As an example, let's define the operators {{+}}, {{*}} and unary {{-}} for boolean, as synonyms for {{or}}, {{and}} and {{not}} respectively:
+
+  Bool (_+_) (Bool b1, Bool b2) = b1 or b2;
+  Bool (_*_) (Bool b1, Bool b2) = b1 and b2;
+  Bool  (-_) (Bool b)           = not b;
+
+Let's also define the operator {{[]}} for sequences, as a synonym of {{()}}:
+
+  T (_[_]) (T* xs, Int i) = xs(i);
+
+
+Closures
+
+Cell has support for closures, although it is very limited compared to what truly functional languages like Haskell (or even some object-oriented languages) can offer. The only thing you can do with closures at the moment is pass them as parameters to a function. This is the definition of one staple of every functional programming language, the {{map()}} function (note that it's just syntactic sugar for sequence comprehension, so it's not particularly useful in and of itself. It's just an example):
+
+  B* map(A* s, (A -> B) f) = (f(x) : x <- s);
+
+The second argument to the {{map(..)}} function is a closure that takes an argument of a generic type {{A}} and returns a value of another generic type {{B}}. That closure is applied to each element of {{s}} in turn. The type {{(A -> B)}} is a closure type. For a closure with multiple arguments, the general form of its type is:
+
+{#{cpp/cls-types.html}#}
+
+where {{A}}, {{A1}}, {{A2}}, ... {{An}} are the types of the argument(s), and {{R}} is the type of the result. The only place where closure types can appear is in the argument list of a function. A function cannot return a closure, and type definitions cannot make use of closure types, since regular data and closures cannot be mixed. Also, a closure cannot take other closures in turn as parameters: all of its arguments have to be regular values.
+Here are a few examples of how you can call a function that takes a closure argument:
+
+  // Int* increment_all(Int* xs) = (x + 1 : x <- xs);
+  Int* increment_all(Int* xs) = map(xs, $ + 1);
+
+  // Int* multiply_all(Int* xs, Int y) = (x * y : x <- xs);
+  Int* multiply_all(Int* xs, Int y) = map(xs, $ * y);
+
+  // Int* square_all(Int* xs) = (square(x) : x <- xs);
+  Int* square_all(Int* xs) = map(xs, square);
+
+  Int square(Int x) = x * x;
+
+  // [B*] map2([A*] ss, (A -> B) f) = [(f(x) : x <- s) : s <- ss];
+  [B*] map2([A*] ss, (A -> B) f) = [map(s, f) : s <- ss];
+
+The are two ways to provide a closure argument in a function call. The first option, if you don't need to capture any local variable, is to just pass the name of an existing function or closure. That's what {{square_all(..)}} and {{map2(..)}} do. The other option is to simply write the expression that constitutes the body of the closure, like in {{increment_all(..)}} and {{multiply_all(..)}}. Inside that expression you can use local variables (which will be captured by the closure) and you can refer to the argument of the closure with the symbol {{$}}, or {{$a}}, {{$b}}, {{$c}}... if the closure has more than one argument.
+
+
+Pattern matching
+
+When writing a function over a union type, you may want to provide a different implementation for each of the cases in the union. There are two ways to do that: one is to write a set of polymorphic functions, the other is to use pattern matching. We'll postpone a discussion of the former until later, and describe the latter here. One of the simplest examples of a type union is the {{Maybe}} type. Let's say we want to write a function that applies a closure to the value contained inside, or do nothing is there's no value at all:
+
+  // type Maybe[T]  = nothing, just(T);
+
+  Maybe[B] apply(Maybe[A] m, (A -> B) f) =
+    match (m)
+      nothing   = :nothing,
+      just(x?)  = :just(f(x));
+
+The match expression takes a value and compares it sequentially to any number of patterns. In the above expression, both {{nothing}} (the one on the left) and {{just(x?)}} are patterns. During evaluation the value being inspected (in this case {{m}}) is matched against each pattern in the order in which they appear, until a match is found: when that happens the corresponding expression on the right is evaluated, and its value becomes the value of the whole match expression. If no match is found, the execution fails, just like with {{undefined}} . Note that more than one pattern may be able to match a given value, but the search stops at the first one: the other ones are ignored.
+Every pattern matches a (possibly infinite) set of values, and may bind new variables. The pattern {{nothing}}, for example, matches one and only one value, the symbol {{nothing}}. This is true in general: every symbol is also a pattern, that matches itself. The second pattern, {{just(x?)}} on the other hand matches any value tagged with the symbol {{just}}. It matches, for example, the values {{just(0)}}, {{just("Hello world!")}}, {{just(day: 27, month: 4, year: 2017)}} or {{just(point(x: 2.5, y: 0.3))}}. The {{x?}} is a pattern variable: if the match succeeds, the value of {{x}} is the value of {{m}} without the tag. In the previous examples, {{x}} would end up having values {{0}}, {{"Hello world"}}, {{(day: 27, month: 4, year: 2017)}} and {{point(x: 2.5, y: 0.3)}} respectively.
+A match expression can match any number of values, not just one: the following function, for example, applies a two-argument function to the content of two {{Maybe}} values if neither is {{nothing}} and returns the tagged result, or {{nothing}} otherwise:
+
+  Maybe[C] apply(Maybe[A] ma, Maybe[B] mb, (A B -> C) f) =
+    match (ma, mb)
+      just(a?), just(b?)  = :just(f(a, b)),
+      _,        _         = :nothing;
+
+The {{_}} pattern is the catch-all pattern: it matches any value.
+When match expressions are the topmost expression in a function definition, and when the value that is being matched is the first argument of that function (or the first arguments, if the matching involves more than one value) you can omit the {{match (..)}} part of the expression. The two functions above can be rewritten as follow:
+
+  Maybe[B] apply(Maybe[A] m, (A -> B) f) =
+    nothing   = :nothing,
+    just(x?)  = :just(f(x));
+
+  Maybe[C] apply(Maybe[A] ma, Maybe[B] mb, (A B -> C) f) =
+    just(a?), just(b?)  = :just(f(a, b)),
+    _,        _         = :nothing;
+
+Patterns can also match tuples (that is, fixed length sequences):
+
+  (B, A) swap_pair((A, B)) =
+    (a?, b?)  = (b, a);
+
+  (C, A, B) rotate_right_once((A, B, C)) =
+    (a?, b?, c?)  = (c, a, b);
+
+and tagged values with any tag. The following two functions accept as input any tagged value, and return the untagged value or the tag itself, respectively:
+
+  T untag(<+>(T)) =
+    t?(v?) = v;
+
+  Symbol tag(<+>(Any)) =
+    t?(v?)  = t;
+
+Union types often include related but different sets of values, each of which is tagged with a different symbol, and in this case pattern matching may be used not to break up a value, but simply to provide a different implementation for each type in the union:
+
+  type Shape = square(side: Float),
+               rectangle(width: Float, height: Float),
+               circle(radius: Float);
+
+  Float pi = 3.141592653589793;
+
+  Float area(Shape s) =
+    square(_)     = s.side ^ 2,
+    rectangle(_)  = s.width * s.height,
+    circle(_)     = pi * s.radius ^ 2;
+
+In patterns like the one above, you can just omit the catch-all pattern {{_}} inside the parentheses. The {{area(..)}} function can be rewritten as follows:
+
+  Float area(Shape s) =
+    square()    = s.side ^ 2,
+    rectangle() = s.width * s.height,
+    circle()    = pi * s.radius ^ 2;
+
+Patterns can also be nested. An example:
+
+  type Point = point(Int, Int);
+  type Rect  = rect(Point, Point);
+
+  Int area(Rect) =
+    rect(
+      point(x1?, y1?),
+      point(x2?, y2?)
+    ) = abs({x1 - x2} * {y1 - y2});
+
+You can also break up a value according to a pattern, and still bind the entire value to a variable, like the following function does: it binds both elements of {{ps}} to a variable, {{p1}} and {{p2}} respectively, and then further breaks up each of them in turn, finally binding the values {{x1}}, {{y1}}, {{x2}}, {{y2}}.
+
+  ((Int, Int), (Int, Int))
+  sort_two_int_pairs(((Int, Int), (Int, Int)) ps) =
+    ((x1?, y1?) p1?, (x2?, y2?) p2?) = (
+      if x1 > y1 then (y1, x1) else p1,
+      if x2 > y2 then (y2, x2) else p2
+    );
+
+Patterns can be used not only with the match expression, but also inside set/relation comprehension (but not sequence comprehension) expressions, like in this example:
+
+  [(Int, Int)] sort_pairs([(Int, Int)] ps) = [
+    if x < y then p else (y, x) : p <- ps, (x?, y?) ?= p
+  ];
+
+The above function iterates through all pairs in the set, and for each of them it pattern matches it in order to bind the two variables {{x}} and {{y}}, and finally produces a result using those variables. If the match fails, then that particular iteraction of the loop is cut short. The following {{radii(..)}} function, for example, takes a set of {{Shape}} values, and for each circle among them it returns its radius, skipping squares and rectangles in the process:
+
+  [Float] radii([Shape] shapes) = [
+    s.radius : s <- shapes, circle() ?= s
+  ];
+
+There's also pattern unions, formed by joining any number of patterns with the {{|}} symbol.
+
+  Bool is_polygon(Shape) =
+    square()    |
+    rectangle() = true,
+    circle()    = false;
+
+Patterns in a union are free to bind variables, but they all have to bind the same set of variables.
+
+There are other patterns in addition to the ones we've seen so far. Here's a complete list, with the set of values each of them matches:
+
+  <+>     // symbols
+  <*..*>  // integers
+  <!>     // floating point numbers
+  ()      // sequences, both empty and non-empty
+  []      // sets, both empty and non-empty
+  [,]     // binary relations (including maps and records, of course)
+  [->]    // maps (including records)
+  [,,]    // ternary relations
+
+The combination of all the above patterns allow us to write universal functions, that is, function that can work on any value, without any prior knowledge about its structure. The following, for example, is a universal function for computing 32-bit hash codes (it's a pretty lame hash function, but never mind that, it's just an example):
+
+  Int pow_2_32 = 4294967296;
+
+  Int mod_2_32(Int n) = mod(n, pow_2_32);
+
+  Int hashcode(Any value) =
+    <+>     = hashcode(_print_(value)),
+    <*..*>  = xor(value / pow_2_32, mod_2_32(value)),
+    <!>     = hashcode(_bits_(value)),
+    ()      = mod_2_32(sum((hashcode(e) : e <- value))),
+    []      = mod_2_32(sum((hashcode(e) : e <- isort(value)))),
+    [,]     = mod_2_32(sum((hashcode(a) + hashcode(b) : a, b <- isort(value)))),
+    [,,]    = mod_2_32(sum((hashcode(a) + hashcode(b) + hashcode(c) : a, b, c <- isort(value)))),
+    t?(v?)  = mod_2_32(hashcode(t) + hashcode(v));
+
+
+Builtin functions
+
+In the above example, {{isort(..)}} is a family of polymorphic functions defined in the standard library that take as argument either a set or a relation and return a sequence containing its entries sorted in an implementation-defined order. Functions whose names start and end with an underscore (like {{_print_(..)}} and {{_bits_(..)}} above) are builtin functions. Builtin functions provide functionalities that are either impossible to implement directly in Cell, or that cannot be implemented efficiently, or that are just convenient to have as builtins for whatever reason. Some of them have aliases in the standard library. The {{&}} operator for sequences, for example, is defined in terms of {{_cat_(..)}} builtin function (doing so will enable an O(1) implementation of sequence concatenation that uses ropes instead of arrays as the underlying physical data structure). Here's the most useful ones among those that don't have aliases:
+
+  // Returns a string containing the textual
+  // representation of any value
+  String _print_(Any)
+
+  // Given the textual representation of a value returns either the
+  // parsed value or the position of the error if parsing fails
+  Result[Any, Nat] _parse_(String)
+
+  // Converts an integer number into a floating point one
+  Float _float_(Int);
+
+  // Given a 64-bit floating point number, returns the
+  // same bit pattern reinterpreted as a 64-bit integer
+  Int _bits_(Float)
+
+
+Polymorphic functions
+
+Functions in Cell can be polymorphic, that is, you can declare multiple functions with the same name and arity, as long as they differ in the types of their arguments. For instance, you can split up the function {{area}} defined earlier in three different ones:
+
+  type Square     = square(side: Float);
+  type Rectangle  = rectangle(width: Float, height: Float);
+  type Circle     = circle(radius: Float);
+
+  Float area(Square s)    = s.side ^ 2;
+  Float area(Rectangle r) = r.width * r.height;
+  Float area(Circle c)    = pi * c.radius ^ 2;
+
+The three specialized {{area(..)}} functions just defined are completely equivalent to the previously defined single function that used a match statement. For polymorphic unary functions (i.e. function that only take one argument) to be compatible, the obvious requirement is that the types of their single argument are disjoint, so for every possible value the compiler knows which one to dispatch at runtime. In practice though, the current version of the compiler is more restrictive than that, in that it requires the types of the argument to be not just disjoint, but also "different enough". Consider for example the following polymorphic functions:
+
+  type Neg = <*..-1>;
+
+  <1..1>    sign(NzNat)   = 1;
+  <0..0>    sign(<0..0>)  = 0;
+  < -1..-1>  sign(Neg)     = -1;
+
+These three definitions of {{sign(..)}} seem reasonable enough. Their arguments are certainly disjoint: the first one only apply to positive integers, the second one to just 0 and the third one to negative integers. But the current version of the compiler won't accept two polymorphic functions if the types of their argument both contain integers, even if they contain disjoint subsets of the set of all integers. If this limitation only applied to integers, it wouldn't be much of a problem, but unfortunately it applies to other data types as well: sequences, sets, relations of the same arity (including maps and records, which are just binary relations) and values tagged with the same tag. The following polymorphic functions, for example, are rejected by the current version of the compiler, as the types of their arguments both contain sequence values, even though they are disjoint, as the first only accepts non-empty sequences of integers, and the second only non-empty sequences of floating point numbers:
+
+  Int   sum(Int+ xs)    = fold(xs, $a + $b);
+  Float sum(Float+ xs)  = fold(xs, $a + $b);
+
+By the way, a {{sum(..)}} function that works on both sequences of integer and floating point numbers (and any other type for which a {{+}} operator has been defined) can still be written using generic programming and protocols (we'll talk about that in a later chapter), but it would have to be restricted to non-empty sequences, as you would bump into a different problem if you tried to extend it so that it works on empty sequences as well. More on that in a minute.
+
+Here's another example of incompatible polymorphic functions:
+
+  type Square2    = (side: Float);
+  type Rectangle2 = (width: Float, height: Float);
+  type Circle2    = (radius: Float);
+
+  Float area(Square2 s)    = s.side ^ 2;
+  Float area(Rectangle2 r) = r.width * r.height;
+  Float area(Circle2 c)    = pi * c.radius ^ 2;
+
+{{Square2}}, {{Rectangle2}} and {{Circle2}}, are almost identical to {{Square}}, {{Rectangle}} and {{Circle}}, the only difference being that they are not tagged. Though clearly disjoint, they are all record types, which are just a special case of binary relations, and the compiler will reject polymorphic functions if more than one of them accepts any binary relation value as argument. This is the reason user-defined types have to be tagged if polymorphic behaviour is expected, so as to make them "different enough" to be accepted by the compiler.
+
+For functions that take more than one argument, it's sufficient that at least one of the arguments is "different enough", even if that argument alone is not enough to decide which function will be dispatched at runtime. Consider the following functions:
+
+  Bool covers(Square s1,     Square s2)      = s1.side >= s2.side;
+  Bool covers(Square s,      Rectangle r)    = s.side >= max(r.width, r.height);
+  Bool covers(Square s,      Circle c)       = s.side >= 2 * c.radius;
+  Bool covers(Rectangle r,   Square s)       = min(r.width, r.height) >= s.side;
+  Bool covers(Rectangle r1,  Rectangle r2)   = r1.width >= r2.width and r1.height >= r2.height;
+  Bool covers(Rectangle r,   Circle c)       = min(r.width, r.height) >= 2 * c.radius;
+  Bool covers(Circle c,      Square s)       = c.radius >= s.side / sqrt(2.0);
+  Bool covers(Circle c,      Rectangle r)    = c.radius >= sqrt(r.width^2 + r.height^2) / 2;
+  Bool covers(Circle c1,     Circle c2)      = c1.radius >= c2.radius;
+
+When {{covers(..)}} is invoked with arguments of type {{Shape}} (defined before, it's the union of {{Square}}, {{Rectangle}} and {{Circle}}) the value of both arguments has to be inspected in order to decide which of the nine polymorphic functions has to be dispatched. But for the purpose of polymorphic compatibility all that is required is that, for every possible pair of {{covers(..)}} functions, the types of either argument are "different enough", in the above-defined sense.
+
+These stricter-than-necessary restrictions on the signatures of polymorphic functions are in place for two reason: first, they guarantee that the proper function can be dispatched quickly at runtime and second, they make the implementation easier. Future versions of the compiler will probably gradually relax them to some extent.
+
+When writing polymorphic functions that operate over collection types, remember that in Cell, the same {{[]}} value is used to represent empty relations of any arity, and that includes the empty set, since sets are just relations of arity one. A consequence of that is that the compiler has no choice but to reject code like the this, because the types of both arguments overlap:
+
+  [T] (_&_)([T] s1, [T] s2) = [x : x <- s1 | x <- s2];
+
+  [A -> B]  (_&_)([A -> B] m1, [A -> B] m2) = [
+    k -> v : k, v <- m1 | k, v <- m2
+  ];
+
+The {{&}} operator is defined as union between sets, and merge between maps. But in an expression like {{[] & []}} which of the two functions should be used, given that {{[]}} is both the empty set and the empty binary relation? In order to avoid ambiguities, the definition of the operator {{&}} has to be split further. Here's how it is defined in the standard library:
+
+  [] (_&_)([], []) = [];
+
+  [+T] (_&_)([+T] s, []) = s;
+  [+T] (_&_)([], [+T] s) = s;
+
+  [+T] (_&_)([+T] s1, [+T] s2) = [x : x <- s1 | x <- s2];
+
+  [+A -> B] (_&_)([], [+A -> B] map) = map;
+  [+A -> B] (_&_)([+A -> B] map, []) = map;
+
+  [+A -> B] (_&_)([+A -> B] map1, [+A -> B] map2) = [
+    k -> v : k, v <- map1 | k, v <- map2
+  ];
+
+All the possible combinations of empty set/map, non-empty set and non-empty map have to be dealt with individually, in order to get rid of any overlap among the types of the arguments.
+
+There's another distinct but vaguely similar problem that presents itself with both the empty sequence {{()}} and the empty set/relation {{[]}}, which was briefly mentioned when discussing the polymorphic {{sum(..)}} functions. In most typed languages, the empty sequence of, say, integers is different from the empty sequence of floating point numbers, or strings. But in Cell there's just a single empty sequence (and a single empty set/relation), and that's a natural consequence of the fact that values in Cell don't have a type (in the usual sense), so it would make no sense to talk of an empty sequence of integers, since an empty sequence, by definition, does not contain anything. So in cases like that of the {{sum(..)}} functions, which return different types ({{Int}} and {{Float}} respectively), that poses a problem: while such a function can be defined over non-empty sequences using protocols, if we were to extend it to the empty sequence {{()}}, what should the expressions {{sum(())}} return? Summing over an empty sequence of integers should return the integer zero {{0}}, while summing over an empty sequence of floating point numbers should return the floating point zero {{0.0}}, which is a different entity in Cell's data model. But since there's only one empty sequence, we can only have one return value, and neither {{0}} nor {{0.0}} is acceptable in both cases. So here it's probably better to just give up polymorphism, and rename one of the functions. Solving this class of issues would require a non-trivial upgrade of the type system, but there are much more pressing issues at the moment, so that's not going to happen anytime soon.

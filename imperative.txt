@@ -1,0 +1,279 @@
+Imperative code
+
+Functions can also be written using a procedural syntax. The following function returns the number of non-zero elements in a sequence of integers:
+
+  Int count_non_zero(Int* xs) {
+    count = 0;
+    for x <- xs:
+      if x != 0:
+        count = count + 1;
+      ;
+    ;
+    return count;
+  }
+
+When using the procedural syntax, the body of the function is, instead of an expression, just a number of statements written between braces. Here we see four types of statements: assignments, returns, conditionals and for loops. All statements, including composite ones, are terminated by a semicolon (the two standalone semicolons above terminate the if and for statements respectively). If the body of an if statements contains a single atomic statements, you can more succinctly write it in postfix notation: the {{count_non_zero(..)}} function can be rewritten as follows:
+
+  Int count_non_zero(Int* xs) {
+    count = 0;
+    for x <- xs:
+      count = count + 1 if x != 0;
+    ;
+    return count;
+  }
+
+The for loop iterates through the sequence {{xs}} storing the current element in {{x}}. For loops can make use of index variables and tuple destructuring just like sequence comprehension. The following function for example takes a sequence of integer pairs, and returns the index of the first pair whose elements are equal, wrapped as a maybe type:
+
+  Maybe[Nat] index_of_first_equal_pair((Int, Int)* ps) {
+    for x, y @ i <- ps:
+      return :just(i) if x == y;
+    ;
+    return :nothing;
+  }
+
+All the above for loops are actually "foreach" loops: they traverse a sequence and execute the body for each of its elements. You can also have standard "for" loops, which iterate over a range of integer. Here's how you can define a Haskell-style {{foldr(..)}} function:
+
+  B foldr(A* xs, B y0, (A B -> B) f) {
+    y = y0;
+    len = |xs|;
+    for i < len:
+      x = xs(len-i-1);
+      y = f(x, y);
+    ;
+    return y;
+  }
+
+The body of the for loop above is executed {{len}} times, with the value of the loop variable {{i}} going from 0 to {{len-1}}. It's basically the equivalent of {{for (int i=0 ; i < len ; i++)}} in C or Java. The for loop has a number of different forms, listed here with their C/Java equivalent:
+
+  for i <= count:     // for (i=0 ; i <= count ; i++)
+  for i = m..n:       // for (i=m ; i < n ; i++)
+  for i = m...n:      // for (i=m ; i <= n ; i++)
+
+Both "for" and "foreach" loops can be combined: this is a (lame and very inefficient) function that looks for duplicates in a sequence:
+
+  T* duplicates(T* s) {
+    ds = ();
+    for x @ i <- s; j = i+1..|s|:
+      y = s(j);
+      if x == y:
+        ds = (ds | x);
+        break;
+      ;
+    ;
+    return ds;
+  }
+
+It's completely equivalent to this second version, which doesn't combine loops:
+
+  T* duplicates(T* s) {
+    ds = ();
+    for x @ i <- s:
+      for j = i+1..|s|:
+        y = s(j);
+        if x == y:
+          ds = (ds | x);
+          break;
+        ;
+      ;
+    ;
+    return ds;
+  }
+
+Any number of loops can combined, not just two. Note that in both cases, the {{break}} statement only terminates the innermost loops.
+
+While loops behave as expected. This is a function that merges two sequences of sorted integers into a single sorted sequence:
+
+  Int* merge(Int* xs, Int* ys) {
+    zs = ();
+    i = 0;
+    j = 0;
+    while i < |xs| or j < |ys|:
+      if i == |xs| or (j < |ys| and ys(j) < xs(i)):
+        zs = (zs | ys(j));
+        j = j + 1;
+      else
+        zs = (zs | xs(i));
+        i = i + 1;
+      ;
+    ;
+    return zs;
+  }
+
+There's also special syntax for infinite loops, that have to be explicitly terminated by a {{break}} or a {{return}}. The following function repeatedly applies a function to a value until it reaches a fixpoint:
+
+  T fixpoint(T x, (T -> T) f) {
+    last = x;
+    loop
+      next = f(last);
+      return next if next == last;
+    ;
+  }
+
+The {{fail}} statement is for statements what {{undefined}} is for expressions: it throws an exception. It doesn't take any argument. The following function returns the index of the first occurrence of an element in the sequence, or fails if the sequence doesn't contain such an element:
+
+  Nat index_first(Any e, Seq s) {
+    for x @ i <- s:
+      return i if x == e;
+    ;
+    fail;
+  }
+
+The {{assert}} and {{print}} statements are used for debugging. They do what you would expect: the first one evaluates a boolean expression and fails if it's false, the second one just prints the value of any given expression using the standard textual representation of values in Cell. Any value printed in such way can be copied and pasted directly inside Cell source code, but it usually has to be enclosed between {{ #{...} }}. A few examples:
+
+  assert i > 0;
+  assert p(x);
+
+  print f(x, y);
+  print [g(x) : x <- xs];
+
+Whenever an assert statement fails, it also prints out or writes to a file the entire call stack, including the values of all function call arguments, and the value of all variables in scope.
+
+Assignments can also be used to unpack tuples:
+
+  (B, A) swap((A, B) p) {
+    a, b = p;
+    return (b, a);
+  }
+
+That comes in handy when you need a function to return multiple values:
+
+  // type RandGen = ...
+  // (Int, RandGen) random_int(RandGen g) = ...
+
+  (Int*, RandGen) random_int_seq(RandGen init_gen, Nat length) {
+    r = ();
+    g = init_gen;
+    for i < length:
+      x, g = random_int(g);
+    ;
+    return (r, g);
+  }
+
+
+Just another type of expressions
+
+A sequence of statements enclosed in braces is an expression in its own right, and can appear anywhere an expression is expected. Here's an example:
+
+  Int* h(Int* xs) = ({
+    y = f(x);
+    return if y >= 0 then y else g(y);
+  } : x <- xs);
+
+Note that the {{return}} statement doesn't cause the entire function to return, it just terminates (and provides a value for) the enclosing procedural block. The above function could have just been written, with less clarity and efficiency, like this:
+
+  Int* h(Int* xs) = (if f(x) >= 0 then f(x) else g(f(x)) : x <- xs);
+
+The syntax for "procedural" functions we've seen so far is just a tiny bit of syntactic sugar. The following two function definitions are completely equivalent, and are represented internally in exactly the same way by the compiler:
+
+  Int sum(Int* xs) {
+    s = 0;
+    for x <- xs:
+      s = s + x;
+    ;
+    return s;
+  }
+
+  Int sum(Int* xs) = {
+    s = 0;
+    for x <- xs:
+      s = s + x;
+    ;
+    return s;
+  };
+
+
+Local variables declaration
+
+Normally you don't need to declare the variables used in a procedural block, as the compiler will automatically infer their type. Their are times, though, when the compiler is not (yet?) able to do so, and in those (very rare) cases, you'll have to explicitly declare the type of some variables. We'll say more about that when we get to the topic of typechecking, but this is an example of a function that would not typecheck without the explicit variable declaration:
+
+  type List[T] = empty_list, list(T, List[T]);
+
+  List[T] seq2list(T* xs) {
+    // Explicitly declaring the type of
+    // local variable "l" as "List[T]"
+    l : List[T];
+
+    l = :empty_list;
+    for i < |xs|:
+      x = xs(|xs|-i-1);
+      l = :list(x, l);
+    ;
+    return l;
+  }
+
+Local variables declarations can also be useful to make sense of the error messages produced by the typechecker, which can be pretty confusing at times if one relies entirely on automatic type inference, and they can also make the code easier to read when dealing with complex data structures.
+
+
+Local functions
+
+Inside the body of functions written in a procedural style, you can also define local functions, that is, functions that are visible only inside the top-level function that contains them. Apart from their restricted scope, they are just like any other function. In particular, they have no access to the arguments or the local variables of the outer function. They have to be defined at the bottom of the enclosing block of statements, and are not available when such a block is used as a normal expression. This is yet another way to define the {{h(..)}} function above:
+
+  Int* h(Int* xs) {
+    return (l(x) : x <- xs);
+
+    Int l(Int x) {
+      y = f(x);
+      return if y >= 0 then y else g(y);
+    }
+  }
+
+
+Imperative programming
+
+Cell also includes a couple of pseudo-imperative features, as some algorithms are just a lot easier to write in an imperative style. We've already seen the first one, the functional insert operation. It generally takes amortized O(1), with a pretty small constant factor. Here's how it works: every time a new sequence is created, the runtime allocates some extra memory at the end of the array. When you try to insert a new element at the end, the runtime tries to make use of that extra space to store the new element. Existing references to the original sequence are not affected, as each of them stores not just a pointer to the array, but also its own copy of the length of the sequence, so they just ignore the extra elements and keep seeing only the original part of the sequence.
+The same thing, by the way, happens with the {{_slice_(..)}} builtin function (which is aliased in the standard library by the function {{slice(..)}}, and used by other standard functions like {{take(..)}} or {{drop(..)}}): creating a subsequence is fast, because the newly created object only needs to store a pointer to the first element of the subsequence and its length.
+Going back to the functional insertion, the runtime needs to make a copy of the original sequence only in two cases: when it runs out of space at the end, in which case the entire sequence is reallocated with extra space, or when the next slot is already taken, likely because it was used by a previous insertion operation. You should take care to avoid the latter case, as much as possible. The following (buggy) function runs in O((N1+N2)^2), where N1 and N2 are the lengths of {{s1}} and {{s2}} respectively, because of the (useless, in this case) {{unused = (res | x);}} instruction:
+
+  T* concat(T* s1, T* s2) {
+    res = s1;
+    for x <- s2:
+      unused = (res | x);
+      // The following instruction causes the reallocation
+      // of the underlying array at every iteration of the
+      // loop because the previous (useless) instruction
+      // has already allocated the next slot
+      res = (res | x);
+    ;
+    return res;
+  }
+
+Once you remove the faulty instruction, the function runs in O(N1+N2), as you would expect. The {{_cat_(..)}} builtin function, which is used by the {{&}} operator for sequences and strings, works in a similar way, so if you build a long sequence/string by appending shorter sequences/strings to its right, the whole process runs in linear time, with respect to the length of the resulting sequence. This is how the {{join(..)}} function is defined in the standard library:
+
+  T* join(T** seqs) {
+    res = ();
+    for s <- seqs:
+      res = _cat_(res, s);
+    ;
+    return res;
+  }
+
+If you were to concatenate those shorter sequences to the left, on the other hand, performance would be disastrous. An example:
+
+  T* very_bad_join(T** seqs) {
+    n = |seqs|;
+    res = ();
+    for i = 1...n:
+      s = seqs(n-i);
+      res = _cat_(s, res);
+    ;
+    return res;
+  }
+
+The language also includes a second pseudo-imperative operation, the sequence update, but it hasn't been fully implemented yet. Here's an example:
+
+  // reverse_permutation((1, 2, 4, 0, 3)) == (3, 0, 1, 4, 2)
+  // reverse_permutation((3, 0, 1, 4, 2)) == (1, 2, 4, 0, 3)
+  Nat* reverse_permutation(Nat* p) {
+    rp = (0 : i < |p|);
+    for x @ i <- p:
+      rp(x) := i;
+    ;
+    return rp;
+  }
+
+A statement of the form {{xs(i) := x;}} is a functional sequence update: conceptually, it is completely equivalent to the following code (provided of course that there's no existing variable named {{xj}} or {{j}} in the current scope):
+
+  fail if i < 0 or i >= |xs|;
+  xs = (if j == i then x else xj : xj @ j <- xs);
+
+And that's exactly how it is currently implemented. But in cases like the one above, it would be pretty easy for the compiler to figure out that at the time of the assignment {{rp}} is the only reference to that particular sequence, in which case the underlying object can be updated directly, in O(1), without any side effects. Of course, there are limits to what even a mildly sophisticated compiler can be expected to be able to infer from a static analysis of the code: such a uniqueness analysis is easy when a sequence is created and updated inside a single function; it can still be doable, in some simple cases, even if the sequence is juggled between different functions: in the case of {{reverse_permutation(..)}}, for example, it's easy to figure out that the returned object is not aliased, so the caller can still update it in place. I'll document the details once such analysis is implemented: it will probably be done in stages, starting with the simplest cases. For the time being, just don't use this feature unless you're dealing with really tiny sequences.

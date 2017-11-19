@@ -1,0 +1,20 @@
+Getting started
+
+The Cell compiler can be downloaded {#{download-link}#}. After you unzip the file, you'll see five directories: {{bin}}, {{stdlib}}, {{examples}}, {{src}} and {{sublime-text}}. The first one contains the Cell compiler executable, the second one the standard library (which at the moment consists of just one file, {{prelude.h}}), and the third one a few ready-to-build examples to get you started. You can find more information about them in {{examples/README.txt}}.
+
+The compiler produces a C++ sources file ({{generated.cpp}}) that can be compiled directly into an executable file if your Cell source code includes a {{Main(..)}} procedure, or otherwise included in an existing C++ project. You'll need a compiler that supports C++11. If your project defines any automata, of either type, the compiler will also produce a second files, {{generated.h}}, which contains the declaration of the interface of the generated classes that you'll be dealing with from your own native C++ code.
+
+There's no documentation for the standard library yet, you'll have to delve into the {{prelude.h}} file, which is very small anyway.
+
+The compiler is provided as a Linux binary, but if you're using another Unix-like platform like OS X/macOS you can try to compile it yourself using the source code in {{src}}. If you're using GCC you can build it by just typing {{g++ -O3 -DNDEBUG cellc.cpp -o cellc}} in {{src}} and then replacing the executable in {{bin}} with the one you built yourself.
+
+The {{sublime-text}} directory contains syntax highlighting files for Sublime Text. Just copy them in the {{~/.config/sublime-text-3/Packages/User}} directory on Linux, or its equivalent in other operating systems.
+
+
+Debugging
+
+There's no debugger for Cell, and debugging is done mainly by tracing the execution of a program with the help of the {{print}} statement. Another useful tool is the {{assert}} statement. When an assertion fails, the execution of the program is stopped and all the variables in scope are printed to the standard output or to a file, if they are too large. If the program is running in debug mode (more on that in a second) the call stack is also printed, along with the value of all the arguments of all function calls on the stack. Call stack and values of function arguments are also printed every time the program crashes, for whatever reason (again, this happens only if the program is running in debug mode). Only a small part of this data is actually written to the standard output, with the rest of it being written to a set of files. All the files created by a program crash are created inside the {{debug}} subdirectory of the working directory of the process. This subdirectory is not created automatically: you have to create it manually before running the code, otherwise no dump file will be produced.
+
+The {{NDEBUG}} preprocessor symbol is used to choose between debug and release mode. It's the same symbol used by the C {{assert(..)}} macro. Defining it when compiling the generated C++ code will disable all the extra debugging code. With GCC, that can be done with the {{-DNDEBUG}} command line argument. The code compiled in debug mode is an order of magnitude slower, so make sure that symbol is defined when building your production binaries.
+
+Sometimes there's no choice but to debug the generated code. The generated code itself is all but incomprehensible, but the names of variables and functions are the same as in the Cell sources, with the addition of a short suffix that is needed to avoid name clashes. For example a two-argument non-polymorphic function named {{my_fn(..)}} in Cell will be named {{my_fn_F2(..)}} in the generated C++ code, and a variable named {{my_var}} will become {{my_var_V}}. To print the value of such variable in GDB you'll need to type {{call print(my_var_V)}} at the debugger prompt.

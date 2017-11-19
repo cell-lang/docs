@@ -1,0 +1,13 @@
+The Cell Programming Language
+
+Cell is a domain-specific programming language designed to integrate with your language of choice in order to provide a number of features that have no equivalent in more conventional languages.
+
+It offers, among other things, a very flexible, entirely structural type system; deterministic, repeatable execution; support for reactive programming; the ability to use relations to store data; transactions and propagation of undefined values for error handling; and ortogonal persistence.
+
+Cell's most important new language construct is automata, which come in two flavors: static automata and reactive ones. For a high-level description of them, head to the {#{overview-link}#} section.
+
+Altough Cell is, in and of itself, a general-purpose language, that can be used to write entire applications (the Cell compiler, for example, is entirely written in Cell), that's not what it is designed for. It is, instead, meant to be used as a domain-specific language, much like, for example, tools like Lex and Yacc (or their more modern alternatives) are used for parsing: from Cell source code you can generate a set of classes in your language of choice, and use them in your existing projects. The only target language that is currently available is C++, but Java and C# are coming soon, and other languages will follow.
+
+If you have any question, there's the {#{google-group-link}#} Google Group. For announcements, there's {#{twitter-link}#} on Twitter.
+
+The Cell compiler is open source software, and all source code is available on {#{src-repos-link}#}.

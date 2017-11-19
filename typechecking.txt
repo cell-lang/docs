@@ -1,0 +1,522 @@
+Type checking
+
+As we've already seen, Cell's data model is entirely structural: it's not possible to define new data types; instead the programmmer has to work with a fixed set of values that is predefined by the language. Once the decision to use a structural data model is made, the type system has little choice but to follow suit. And once the type system itself is structural, it's pretty hard to avoid undecidability. In a conventional type system, a program is either correct or not (with respect to type checking). In an undecidable one, there's a third possibility: a program that is type-correct but is rejected by the typechecker, which is unable to verify its correctness. Unfortunately there's no clear definition of which programs should be accepted and which should not, as that depends on how capable the typechecker is, which is hard to legislate. And while a structural type system is more flexible and, generally speaking, more precise than a nominative one, it also requires the developer to have a more detailed knowledge of the algorithms used during the typechecking process, and to keep that knowledge up to date whenever they are improved.
+
+
+Polymorphic functions
+
+The first thing you need to know is how the typechecker deals with polymorphic functions. Let's use, as an example, the {{covers(..)}} family of functions we defined in a previous chapter:
+
+  type Square     = square(side: Float);
+  type Rectangle  = rectangle(width: Float, height: Float);
+  type Circle     = circle(radius: Float);
+
+  type Shape = Square, Rectangle, Circle;
+
+  Bool covers(Square s1,     Square s2)      = s1.side >= s2.side;
+  Bool covers(Square s,      Rectangle r)    = s.side >= max(r.width, r.height);
+  Bool covers(Square s,      Circle c)       = s.side >= 2 * c.radius;
+  Bool covers(Rectangle r,   Square s)       = min(r.width, r.height) >= s.side;
+  Bool covers(Rectangle r1,  Rectangle r2)   = r1.width >= r2.width and r1.height >= r2.height;
+  Bool covers(Rectangle r,   Circle c)       = min(r.width, r.height) >= 2 * c.radius;
+  Bool covers(Circle c,      Square s)       = c.radius >= s.side / sqrt(2.0);
+  Bool covers(Circle c,      Rectangle r)    = c.radius >= sqrt(r.width^2 + r.height^2) / 2;
+  Bool covers(Circle c1,     Circle c2)      = c1.radius >= c2.radius;
+
+Let's now consider the following function, which takes a {{Shape}} and a sequence of {{Shape}} values, and returns all the elements in the sequence that covers the given {{Shape}}:
+
+  Shape* covering(Shape shape, Shape* shapes) =
+    (s : s <- shapes, covers(shape, s));
+
+Here {{covers(..)}} is called with both arguments of type {{Shape}}. How does the compiler make sure it typechecks? Well, the first thing the compiler does is to go through all the nine polymorphic definitions of {{covers(..)}} to see if any of them can individually accept arguments of type {{Shape}}. In this case, of course, none does. Failing that, the compiler tries to "aggregate" the signatures of the individual functions into more general ones. It starts by grouping together signatures that differ only in the type of the first argument (and also the result type, which is ignored at this stage):
+
+  Bool covers(Square,    Square)
+  Bool covers(Rectangle, Square)
+  Bool covers(Circle,    Square)
+
+  Bool covers(Square,    Rectangle)
+  Bool covers(Rectangle, Rectangle)
+  Bool covers(Circle,    Rectangle)
+
+  Bool covers(Square,    Circle)
+  Bool covers(Rectangle, Circle)
+  Bool covers(Circle,    Circle)
+
+At this point, each group can be aggregated into a single, equivalent signature:
+
+  Bool covers(<Square, Rectangle, Circle>, Square)
+  Bool covers(<Square, Rectangle, Circle>, Rectangle)
+  Bool covers(<Square, Rectangle, Circle>, Circle)
+
+Now the whole process is applied again to these new aggregated signatures, but using the second argument instead. After this second step, we end up with a single signature:
+
+  Bool covers(<Square, Rectangle, Circle>, <Square, Rectangle, Circle>)
+
+For functions that take more than two arguments, the process is repeated for each one of them. Once these aggregated signatures have been calculated, the compiler checks if any of them, individually, can accept two arguments of type {{Shape}}. If none can, the program is rejected. Note that during the whole process, and during typechecking in general, two types are considered equal if the compiler can prove they define the same (extensional) set of values, not if they have the same name. Whether a type is defined a {{Shape}}, {{<Square, Rectangle, Circle>}}, or even {{<Rectangle, circle(radius: <!>), square(side: <!>)>}} is totally irrelevant, because the compiler can easily figure out that those definitions are equivalent.
+
+This algorithm works well enough in practice that you usually don't even need to think about it, but bear in mind it can easily go awry if you do something unusual. If, for example, you were to add the following definitions, without making any changes to the previous code, the typechecker would end up rejecting your perfectly valid program:
+
+  type Ellipse = ellipse(horz_axis: Float, vert_axis: Float);
+
+  Bool covers(Ellipse e, Circle c) = min(e.horz_axis, e.vert_axis) >= c.radius;
+
+The first aggregation step would now produce the following signatures:
+
+  Bool covers(<Square, Rectangle, Circle>, Square)
+  Bool covers(<Square, Rectangle, Circle>, Rectangle)
+  Bool covers(<Square, Rectangle, Circle, Ellipse>, Circle)
+
+and this is what the compiler would be left with after the second and last step:
+
+  Bool covers(<Square, Rectangle, Circle>, <Square, Rectangle>)
+  Bool covers(<Square, Rectangle, Circle, Ellipse>, Circle)
+
+and neither of the above signatures can, on its own, handle two arguments of type {{Shape}}.
+The {{covers(..)}} family of functions are of course an example of multiple-dispatch polymorphism, but the same problem can happen even with functions that are dispatched based on the type of just one argument. Consider the following example (and remember there's no automatic conversion from integers to floating point numbers in Cell. Not yet, at least):
+
+  Square scale(Square square, Float ratio) =
+    square(side: square.side * ratio);
+
+  Rectangle scale(Rectangle rect, Float ratio) =
+    rectangle(width: rect.width * ratio, height: rect.height * ratio);
+
+  Circle scale(Circle circle, <Float, Int> ratio) =
+    circle(radius: circle.radius * ratio);
+
+The third function definition is a bit anomalous, in that its second argument can be either an integer or a floating point number, while the first two only accept a {{Float}}. So only the first two signatures can be merged, and a function like this is going to be rejected by typechecker:
+
+  Shape double_size(Shape shape) = scale(shape, 2.0);
+
+In this particular case, the problem can be fixed by splitting the third instance of {{scale(..)}} in two, if don't mind duplicating the code:
+
+  Circle scale(Circle circle,  Float ratio) =
+    circle(radius: circle.radius * ratio);
+
+  Circle scale(Circle circle,  Int ratio) =
+    circle(radius: circle.radius * ratio);
+
+All these limitations are just temporary. The current algorithm will eventually be integrated by a slower but more capable one that will handle the most complex cases. This is a low priority improvement though, since even the current algorithm seems to work pretty well in practice.
+
+One more thing before we move on to the next topic. When calculating the type of a polymorphic function call, the compiler considers only the instances of the polymorphic family of functions that can actually be dispatched in that particular context. The following functions, for example, typecheck:
+
+  Square double(Square square) = scale(square, 2.0);
+
+  <Square, Rectangle> triple(<Square, Rectangle> shape) =
+    scale(shape, 3.0);
+
+In the case of {{double(..)}}, even though the {{scale(..)}} functions can return any type of {{Shape}}, the compiler can figure out that only the first one can actually be dispatched, and that one will return a value of type {{Square}}, which is compatible with the definition of {{double(..)}}. Similarly, in the second case, only the first two definitions of {{scale(..)}} can possibly be dispatched, so the returned value can only be of type {{Square}} or {{Rectangle}}.
+
+
+Generic programming and type variables
+
+We're now going to take a closer look at type variables and generic programming. Let's start with a generic function we've already seen before:
+
+  T* concat(T* s1, T* s2) {
+    s = s1;
+    for x <- s2:
+      s = (s | x);
+    ;
+    return s;
+  }
+
+{{concat(..)}} can of course concatenate sequences of any type, even when the two sequences contain values of different types. An expression like {{concat((0, 1, 2, 3), (:a, :b, :c))}} is perfectly legal, and when evaluated yields the value {{(0, 1, 2, 3, :a, :b, :c)}}. When the typechecker encounters a call to a generic function (that is, a function whose signature contains type variables) it needs to do two things: determine if its arguments are valid, and calculate the type of the returned value (which is also the type of the whole expression). To a first approximation, the first task is basically done by treating all type variables in the signature as if they were the type {{Any}}. In the case of {{concat(..)}}, it's as if the signature of the function had been written this way: {{Any* concat(Any*, Any*)}}. It gets a bit more complicated than that when dealing with closure arguments, but it's still pretty straightforward. In order to calculate the type of the expression, on the other hand, since the return type of {{concat(..)}} contains the type variable {{T}}, such variable must be somehow bound to an actual type, and the typechecker tries to determine the smallest type that can fit the actual arguments of the call. In the case of {{concat((0, 1, 2, 3), (:a, :b, :c))}}, {{T}} is bound to the type {{<<0..3>, a, b, c>}}, which is then replaced in the return type of the function, {{T*}}, yielding the final type for the overall expression: {{<<0..3>, a, b, c>*}}.
+
+This process seems straightforward enough, but there are a number of issues you need to be aware of. In the signature of {{concat(..)}} the type variable {{T}} appears twice, and the typechecker also ends up binding it twice, to {{<0..3>}} when unifying the type of the first argument, and to {{<a, b, c>}} when unifying the second, with the final binding being the union of the two: {{<<0..3>, a, b, c>}}. To see how this process can go wrong, say you wanted to define the operator {{[]}} for maps, as an alternative to the ugly (and temporary) map lookup operation {{map(key, !!)}} we saw earlier. With a nominative type system, it would be fine to write something like this:
+
+  B (_[_])([A -> B] map, A key) = map(key, !!);
+
+but in Cell doing so would actually loose you some type safety. The following code, for example, would typecheck, but it would always fail at runtime:
+
+  type Id = id(Nat);
+
+  Float lookup_bad_example([Id -> Float] map, Nat key) = map[key];
+
+The typechecker would bind {{A}} to {{Id}} and {{B}} to {{Float}} when looking at the first argument of {{[]}} and then again {{A}} to {{Nat}} when looking at the second. The final binding for {{A}} would be {{<Id, Nat>}} and the type of the overall expression would be {{B}} = {{Float}} and everything would look fine to the typechecker, which would completely miss a preventable error.
+
+A nominative type system, on the other hand, could have bound {{A}} to either {{Id}} or {{Nat}}, but not both, and that would have been enough to catch the error at compile time. This is an example of how the extra flexibility offered by a structural type system, even though it provides many significant benefits and actually allows a more effective error checking in many cases (more on that later), can sometimes become a liability, especially, but not exclusively, when dealing with parametric types.
+
+A similar, although less serious, problem can happen with membership test expressions, for both sets and relations. If, for example, you defined an {{in(..)}} function as an alias for the corresponding native set membership test primitive:
+
+  Bool in(T elt, [T] set) = set(elt);
+
+and then you called it like this:
+
+  type Neg = <*..-1>;
+
+  Bool contains_bad_example_1([Int] set, Id  elt) = in(elt, set);
+  Bool contains_bad_example_2([Nat] set, Neg elt) = in(elt, set);
+
+the compiler would happily accept your code, and the two above functions would not crash, but they would always return false, since a search for a tagged integer in a set of untagged ones is certainly not going to turn up anything, and neither is a search for negative integers in a set of non-negative ones.
+
+Incidentally, that's an example of how the line between sound and unsound (with respect to type checking) code may become a bit blurred in a structural type system. The {{containts_bad_example_?(..)}} functions are certainly buggy, but they don't actually cause a crash at runtime, so it's hard to say if they are type safe or not. The vast majority of all nominative type systems I know would have prevented the error in {{contains_bad_example_1(..)}}, but would have been powerless against the one in {{contains_bad_example_2(..)}}. Similar considerations apply to {{lookup_bad_example(..)}}, although in this latter case we are definitely closer to the "unsafe" end of the spectrum.
+
+All the above errors would have been caught if the native/primitive operators had been used instead. An expression like {{map(key, !!)}} is rejected if the type of {{key}} is not a subset of the type of the keys in {{map}}. The same goes for similar expressions like {{rel2(!!, y)}} or {{rel3(x, y, !!)}}. This criterion usually works fine, although in some cases it's a bit too restrictive. For example {{map(key, !!)}} would be rejected if the type of {{map}} were {{[Nat -> String]}} and the type of {{key}} were {{Int}}, since {{Int}} is not a subset of {{Nat}}, but that's a situation that can occur fairly often in perfectly valid code. Possible workarounds include changing the declared type of {{map}}, either by changing the function signature, or by using an explicit local variable declaration; doing a run-time type check (more on that later) to convince the type system that {{key}} is indeed non-negative; or just using a function like the operator {{[]}} above.
+In the case of membership test operators like {{set(elt)}} (and similar ones like {{map(key, *)}}) requiring the type of {{elt}} to be a subset of the type of the elements of {{set}} is just too restrictive. That's how it actually was in an earlier version of the language, but in the end that had to be changed as it turned out to be more trouble that it was worth. So now the typechecker expects the type of {{elt}} and that of the elements of {{set}} not to be disjoint: that seems in practice to be enough to catch the vast majority of errors, without placing any unnecessary burden on the developer.
+
+
+Type refinement
+
+At any given time during the type checking process, the compiler keeps track of the "type" of each variable in scope. Such a type is just a superset of the set of possible values that particular variable can possibly hold at that particular time (always bear in mind that in a structural type system like Cell's a type is just a possibly infinite set of values that is know at compile time). This (superset of the) set of possible values is not fixed, and it changes every time a variable is assigned a new value, as this snipped of code shows:
+
+  x = 5;
+  // Here the "type" of x is <5..5>
+  x = factorial(x);
+  // Now it has become Nat, assuming that's the return type of
+  // factorial(..). Its actual value is alway 120, of course
+  x = _print_(x);
+  // Now the "type" of x is String. Its actual value is always "120"
+
+But assignments are not the only things that can change the type associated with each variable at any particular position in the code. Even if the actual value of the variable doesn't change, the knowledge the typechecker has about it may. The compiler may either loose information (that's more or less what happened in some of the generic programming examples shown in the previous paragraph) or gain more, and the primary way to do that is to take advantage of expressions and statements that involve some form of branching, like the conditional {{if ... then ... else ...}} expression, the if statement or the match expression. We'll defer a discussion of the latter to a later paragraph and concentrate one the first two here.
+
+Whenever a conditional expression is evaluated, different combinations of values for all the variables used in the condition can cause the execution to jump to either the "then" or the "else" branch of the condition, and inside each branch the typechecker can make additional assumptions about the possible state of each variable. To make the most trivial and obvious of all examples, we can easily conclude that the expression {{if v then v else not v}} always returns {{true}} and that therefore its type is {{True}} (= {{<true>}}) because we know that indipendently of the value of {{v}}, if we make it inside the "then" branch, the value of {{v}} must be {{true}}, and conversely if we land in the "else" branch its value can only be {{false}}. There are other kinds of expressions the typechecker can take advantage of every time they appear in the head of a conditional expression or, equivalently, an if statement, and now we're going to go through each one of them in turn. Note that this whole process is based on heuristics (which will change over time) and only works in a few special cases, without a general, elegant algorithm governing it. It is, nonetheless, useful in pratice.
+
+The first and most obvious way to acquire new compile-time information about the content of a variable is to do an explicit run-time type check, {{var :: Type}}. As an example, {{int_seqs(..)}} below searches for sequences of integers nested inside an arbitrary value, and uses a run-time type check to determine if it has found one:
+
+  [Int*] int_seqs(Any value) =
+    if value :: Int*
+      then [value]
+      else search_nested(value, int_seqs);
+
+where {{search_nested(..)}} is defined as follow:
+
+  [T] search_nested(Any value, (Any -> [T]) search) =
+    <+>     |
+    <*..*>  |
+    <!>     = [],
+    ()      = union([search(v) : v <~ value]),
+    []      = union([search(v) : v <- value]),
+    [,]     = union([search(v) : a0, a1 <- value, v <- [a0, a1]]),
+    [,,]    = union([search(v) : a0, a1, a2 <- value, v <- [a0, a1, a2]]),
+    t?(v?)  = search(v);
+
+Incidentally, {{search_nested(..)}} is another example of a universal function, one that operates on values of any type and uses pattern matching to inspect and disassemble them. Inside the "then" branch of {{int_seqs(..)}} the compiler knows that {{value}} is of type {{Int*}}, that's why the function typechecks, while inside the "else" branch the typechecker uses the previous known type for {{value}}, in this case {{Any}}. In some cases, it would actually be useful if the compiler narrowed down the type of the variables in the "else" branch as well. The following function, for example, currently does not typecheck:
+
+  Nat abs(Int x) = if x :: Nat then x else -x; // DOES NOT TYPECHECK!!
+
+but it obviously should, since if we end up in the "else" branch {{x}} can only be negative. That will be implemented in a future version of the compiler.
+
+As a side note, a runtime type check like the {{value :: Int*}} above can be quite expensive, since unlike what happens with nominatively typed languages, in Cell the only way to find out if a sequence is a sequence of integers is to check each of its elements, one by one, to see if they are actual integers, and operation that takes O(n), where n is the length of the sequence. This process could be optimized in some special cases, but not in general, and in any case the compiler doesn't perform any optimizations at the moment.
+
+Polymorphich boolean functions can also be used to perform run-time type checks, provided that they are defined in a very specific way. They are faster (at least in the current implementation), safer, work on both branches of the conditional expression or statement and look more natural. Here's how the {{Result[..]}} type is defined in the standard library, together with a few related functions:
+
+  type Success[T] = success(T);
+  type Failure[T] = failure(T);
+
+  type Result[R, E] = success(R), failure(E);
+
+  True  succeeded(Success[T]) = true;
+  False succeeded(Failure[T]) = false;
+
+  False failed(Success[T]) = false;
+  True  failed(Failure[T]) = true;
+
+  T result(Success[T] r) = untag(r);
+
+  T error(Failure[T] r) = untag(r);
+
+  // Defined elsewhere
+  // T untag(<<+>(T)>) =
+  //   t?(v?) = v;
+
+Take notice of the signatures of {{succeeded(..)}} and {{failed(..)}}. If a call to {{succeeded(..)}} returns {{true}} (or, equivalently, a call to {{failed(..)}} returns false) the compiler can narrow down the type of the argument from {{Result[R, E]}} to {{Success[R]}} just by looking at the signatures of those polymorphic functions. Conversely, the type is inferred to be {{Failure[E]}} if {{succeeded(..)}} returns false or {{failed(...)}} returns true. Only after that check has been performed can {{result(..)}} and {{error(..)}} be used, since they're both total functions defined only on {{Success[..]}} or on {{Failure[..]}}, not on the entire {{Result[..]}} type. Here's an example, with comments explaining the "reasoning process" of the typechecker:
+
+  // Tries to parse a floating point number, starting at the
+  // given position. Returns the parsed value and the next
+  // offset on success, or the position of the parsing error
+  // otherwise, wrapped inside a Result type
+  Result[(Float, Nat), Nat] parse_float(String str, Nat offset) {
+    ...
+  }
+
+  Result[Float, Nat] parse_and_add_two_floats(String str) {
+    res = parse_float(str, 0);
+    // Here the type of res can be either Success[(Float, Nat)]
+    // or Failure[Nat]. If failed(res) returns true, we can narrow
+    // that down to Failure[Nat], which happens to be a valid
+    // return type for the current function
+    return res if failed(res);
+    // failed(res) returned false, so the typechecker knows that
+    // the type of res can now only be Success[(Float, Nat)],
+    // which can be safely passed to the result(..) function
+    x, i = result(res);
+    res = parse_float(str, i);
+    return res if failed(res);
+    y, i = result(res);
+    return :success(x + y);
+  }
+
+All this works even if the return type of some (but not all) of the instances of a polymorphich predicate is {{Bool}} as opposed to either {{True}} or {{False}}. In the following example:
+
+  type Tab = Ta, Tb;
+
+  Bool  p(Ta) = ...
+  False p(Tb) = false;
+
+nothing can be inferred about {{x}} if {{p(x)}} is false, since that could happen for both {{Ta}} and {{Tb}}, but if it is true the typechecker can safely narrow down the type of {{x}} to {{Ta}}, since {{p(x)}} would certainly be false if {{x}} belonged to {{Tb}}.
+
+Equality and inequality checks can also provide the compiler with more information about the type of a variable if this is compared against a symbol, an integer, the empty sequence or the empty set/relation. The {{Maybe[B] apply(Maybe[A], (A -> B))}} function we saw earlier could for example be rewritten like this:
+
+  Maybe[B] apply(Maybe[A] m, (A -> B) f) =
+    if m != :nothing
+      then :just(f(untag(m)))
+      else :nothing;
+
+This alternative definition typechecks because the compiler crosses out the symbol {{nothing}} from the set of all possible values for the variable {{m}} in the "then" branch (and conversely it leaves only {{nothing}} in the "else" branch), leaving only values of the form {{just(..)}} that can then be safely passed to {{untag(..)}}, which is defined only for tagged values. This is another example:
+
+  Int range(Int* xs) = if xs != () then max(xs) - min(xs) else 0;
+
+Both {{min(..)}} and {{max(..)}} are defined only for non-empty sequences, so we have to check that {{xs}} is indeed not empty in order for the typechecker to accept our code.
+
+Let's now see what happens when these type-refining boolean expression are combined with the logical operators {{and}}, {{or}} and {{not}}. The effect of {{not}} is obvious: it swaps the environments (i.e. the set of types associated with each variable) in the two branches of a conditional expression or if statement. The effect of {{and}} and {{or}} is a bit more complex: given an expression of the form {{if <expr1> and <expr2> then ... else ...}} the "then" branch is evaluated only if both {{expr1}} and {{expr2}} are true, and {{expr2}} is evaluated only if {{expr1}} is true, so the compiler first refines all types under the assumptions that {{expr1}} is true, then uses the resulting environment to typecheck {{expr2}} and finally refines it one more time under the assumption that {{expr2}} is true to obtain the types for the "then" branch of the expression. The "else" branch on the other hand is evaluated only if {{expr1}} is false or {{expr1}} is true and {{expr2}} is false, so the typechecker calculates the variables' type for the two scenarios separately, and then proceeds to "merge" them, that is, it associates with each variables the union of the types that it would have in the two scenarios. The treatment of the {{or}} operator is similar, it just reverses the roles of truth and falsehoods in some places. A few (weird) examples can help clarify this process:
+
+  // min(xs) (whose only argument has to be of type Int+) can
+  // be called in the right condition only because the left one
+  // has already ruled out the possibility that xs is empty
+  Bool are_non_negative(Int* xs) = xs == () or min(xs) >= 0;
+
+  // Inside the "then" branch both x and y must be integers,
+  // so they can be added. No assumption on their type is made
+  // in the "else" branch
+  Int sum_unsafe(Any x, Any y) =
+    if x :: Int and y :: Int
+      then x + y
+      else undefined;
+
+  // Inside the "then" branch x is assumed to be of type <Int, Float>
+  // so the unary minus operator can be called safely.
+  <Int, Float> negate_unsafe(Any x) =
+    if x :: Int or x :: Float
+      then -x
+      else undefined;
+
+All the heuristics described so far work not only with local variables, but also with record fields. If for example a variable {{p}} has type {{Param}}, defined like this:
+
+  type Param = param(id: Symbol, value: Maybe[Int]);
+
+then in a conditional expression of the form {{if p.value != :nothing then ... else ..}} the type associated to {{p}} would become {{<parameter(id: Symbol, value: Just[Int])>}} in the "then" branch, and {{<parameter(id: Symbol, value: Nothing)>}} in the "else" one.
+
+The type of variables containing records (or tagged records) can be refined also by the field existence test {{r.f?}}. In a previous chapter we saw the following code:
+
+  type Point = point(x: Float, y: Float, z: Float?);
+
+  Float z(Point p) = if p.z? then p.z else 0.0;
+
+The effect of {{p.z?}} here is to narrow down the type of {{p}} to {{<point(x: Float, y: Float, z: Float)>}} in the "then" branch, and to {{<point(x: Float, y: Float)>}} in the "else" one.
+
+
+Record types and comprehension expressions
+
+As we've already seen, records in Cell are just maps whose keys happen to be symbols, and can therefore be used inside set and relation comprehension expressions, and the typechecker has some extra built-in logic to deal with that. Probably the best way to get a sense of what it does is to go through a few examples. Let's start with the simplest possible one, a weird identity function for a specific type of record:
+
+  type WeatherMsrt1 = (
+    id:           Nat,
+    time:         Time,
+    station_id:   String,
+    temperature:  Int,
+    pressure:     Float,
+    humidity:     Nat
+  );
+
+  WeatherMsrt1 wm_1_id(WeatherMsrt1 m) = [l -> v : l, v <- m];
+
+It's obvious that if {{m}} is a map then an expression like {{[l -> v : l, v <- m]}} just makes an identical copy of it, so it's not entirely surprising that {{wm_1_id(..)}} typechecks. Let's now say we need to remove one of the fields of the record, in this case {{humidity}}:
+
+  type WeatherMsrt2 = (
+    id:           Nat,
+    time:         Time,
+    station_id:   String,
+    temperature:  Int,
+    pressure:     Float
+  );
+
+  WeatherMsrt2 wm_1_to_2(WeatherMsrt1 m) =
+    [l -> v : l, v <- m, l != :humidity];
+
+or to change the type of one of the fields, {{station_id}}, by replacing the original identifier of type {{String}} with a numeric one, using a conversion table:
+
+  type WeatherMsrt3 = (
+    id:           Nat,
+    time:         Time,
+    station_id:   Nat,
+    temperature:  Int,
+    pressure:     Float,
+    humidity:     Nat
+  );
+
+  WeatherMsrt3 wm_1_to_3(WeatherMsrt1 m, [String -> Nat] conv_table) = [
+    l -> if l == :station_id then conv_table(v, !!) else v : l, v <- m
+  ];
+
+or maybe to delete the {{station_id}} field altogether, if a particular alphanumeric weather station identifier does not appear in the conversion table:
+
+  type WeatherMsrt4 = (
+    id:           Nat,
+    time:         Time,
+    station_id:   Nat?,
+    temperature:  Int,
+    pressure:     Float,
+    humidity:     Nat
+  );
+
+  WeatherMsrt4 wm_1_to_4(WeatherMsrt1 m, [String -> Nat] conv_table) = [
+    l -> if l == :station_id
+      then conv_table(v, !!)
+      else v
+    : l, v <- m, l != :station_id or conv_table(v, *)
+  ];
+
+or to rename a couple fields, {{temperature}} into {{temp_celsius}} and {{pressure}} into {{pressure_bars}}:
+
+  type WeatherMsrt5 = (
+      id:             Nat,
+      time:           Time,
+      station_id:     String,
+      temp_celsius:   Int,
+      pressure_bars:  Float,
+      humidity:       Nat
+    );
+
+  WeatherMsrt5 wm_1_to_5(WeatherMsrt1 m) = [
+    if   l == :temperature  then :temp_celsius
+    elif l == :pressure     then :pressure_bars
+                            else l
+    -> v : l, v <- m
+  ];
+
+All the above operations can of course be combined together. We can also merge two (or more) records:
+
+  type MsrtData    = (id: Nat, time: Time, station_id: String);
+  type WeatherData = (temperature: Int, pressure: Float, humidity: Nat);
+
+  WeatherMsrt1 merge_wm_data(MsrtData md, WeatherData wd) =
+    [l -> v : l, v <- md | l, v <- wd];
+
+To a first approximation, in order to typecheck the above functions, the compiler proceeds more or less like this: it first splits any record type into a set of single-field records. The type {{WeatherData}} for example is split into {{(temperature: Int)}}, {{(pressure: Float)}} and {{(humidity: Nat)}}, which can be rewritten as {{[+<temperature> -> Int]}}, {{[+<pressure> -> Float]}} and {{[+<humidity> -> Nat]}} respectively. Each single-field record type is then typechecked individually, with the map key being a known symbol, using the same heuristics that are applied to conditional expressions and if statements. When typecheking {{[+<humidity> -> Nat]}} in {{wm_1_to_2(..)}} for example, the compiler concludes that the condition {{l != :humidity}} can never be true, so that particular field would on its own produce the empty map, while a type like {{[+<time> -> Time]}} would cause the same condition to be always true, and the whole comprehension expression would amount to just an identity expression. Finally the typechecker merges back all the individual result types into a single one, trying to produce the most specific type possible, which in the case of the above functions happens to be a record type.
+
+
+Match expressions
+
+Let's start with another example from the standard library:
+
+  Result[B, E] apply(Result[A, E] r, (A -> B) f) =
+    success(v?) = :success(f(v)),
+    failure()   = r;
+
+In the first branch of the match expression the type associated to the new variable {{v}} is {{A}}, as expected. But the typechecker also narrows down the type of the variable {{r}} to the set of values that can be successfully matched by the {{success(v?)}} pattern, that is, {{Success[A]}}. This is demonstrated in the second branch, where the type of {{r}} is narrowed down to {{Failure[E]}}: without that, the expression would not typecheck. This happens even when the target of the pattern matching is not a variable but the field of a (possibly tagged) record, and when the match involves more than one expression, as is demonstrated in this longish (and admittedly very bizzare) example:
+
+  type Id     = id(Symbol);
+  type SurrId = surr_id(Nat);
+
+  type AnyId  = Id, SurrId;
+
+  type Entity = entity(id: AnyId, alt_id: AnyId);
+
+  type Entity1 = entity(id: Id,     alt_id: Id);
+  type Entity2 = entity(id: Id,     alt_id: SurrId);
+  type Entity3 = entity(id: SurrId, alt_id: Id);
+  type Entity4 = entity(id: SurrId, alt_id: SurrId);
+
+  String id_repr(Id id)               = _print_(_untag_(id));
+  String surr_id_repr(SurrId surr_id) = _print_(_untag_(surr_id));
+
+  String entity1_repr(Entity1 e) = id_repr(e.id) & "/" & id_repr(e.alt_id);
+  String entity2_repr(Entity2 e) = id_repr(e.id);
+  String entity3_repr(Entity3 e) = id_repr(e.alt_id);
+  String entity4_repr(Entity4 e) = surr_id_repr(e.id) & "/" & surr_id_repr(e.alt_id);
+
+  String entity_repr(Entity e) =
+    match (e.id, e.alt_id)
+      id(),       id()        = entity1_repr(e),
+      id(),       surr_id()   = entity2_repr(e),
+      surr_id(),  id()        = entity3_repr(e),
+      surr_id(),  surr_id()   = entity4_repr(e);
+
+In the body of {{entity_repr(..)}} the type of the fields of {{e}} is narrowed down, for each branch of the match statement, to the set of values whose fields can match the branch patterns, and after that {{e}} is passed as argument to one of four functions each of which only accepts a subset of the values that comprise the type {{Entity}}.
+
+The typechecker does not yet "remember" the effect of failed matches, though. The following function ought to typecheck, but it currently doesn't:
+
+  Result[B, E] not_yet_valid_apply(Result[A, E] r, (A -> B) f) =
+    success(v?) = :success(f(v)),
+    _           = r;
+
+{{not_yet_valid_apply(..)}} is totally equivalent to {{apply(..)}}, since all branches are tried sequentially, and if we make it to the second one, {{r}} can only be of type {{Failure[E]}}, otherwise execution would have stopped at the first. Expect this feature pretty soon, though, at least for single-argument match expressions.
+
+As you would expect, the compiler rejects your code if one of the patterns cannot match any of the possible value of the target expression. Example:
+
+  Maybe[B] bad_apply(Maybe[A] m, (A -> B) f) =
+    noting    = :nothing,
+    justs(x?) = :just(f(x));
+
+In the above code, both patterns have been mispelled. {{noting}} and {{justs(x?)}} are perfectly valid patterns, of course, but in this context they can never produce a match, so the compiler just rejects them. One thing the compiler doesn't do yet is to check that all possible cases have been accounted for. The following function, for example, is currently accepted by the typechecker, but it won't be in the future:
+
+  T value_unsafe(Maybe[T]) =
+    just(x?)  = x;
+
+This is the recommended way to write it, by explicitly handling all possibilities:
+
+  T value_unsafe(Maybe[T]) =
+    just(x?)  = x,
+    nothing   = undefined;
+
+In cases where you need to handle many different types of values in a uniform way, you can also make use of the catch-all pattern {{_}}, but I would advise extreme caution there. The problem can be neatly explained with a simple example. Say you initially have the following code:
+
+  type Shape  = square(side: Float),
+                rectangle(width: Float, height: Float),
+                circle(radius: Float);
+
+  Bool has_vertexes(Shape) =
+    circle()  = false,
+    _         = true;
+
+and then change the definition of {{Shape}} to include ellipses:
+
+  type Shape  = square(side: Float),
+                rectangle(width: Float, height: Float),
+                circle(radius: Float),
+                ellipse(axes: (Float, Float));
+
+and you forget to update {{has_vertexes(..)}}. See the problem? The catch-all branch is initially applied only to squares and rectangles, which is fine, but once a new alternative is added to the {{Shape}} union type, it automatically "inherits" the default behaviour, and that's wrong. And the typechecker would be totally unable to prevent this error, even once the totality check mentioned above is implemented. If, on the other hand, {{has_vertexes(..)}} had been defined like this:
+
+  Bool has_vertexes(Shape) =
+    square()    |
+    rectangle() = true,
+    circle()    = false;
+
+the error could have been spotted at compile time by an inproved version of the typechecker, but even with the current one, the problem would have manifested itself with a run-time crash, which is a lot better than getting a wrong result, since in that case at least the presence of the error would not go unnoticed, and its cause would be clear.
+The problem is made worse by the fact that there's no encapsulation in Cell, so functions that pattern match against a given union type could be practically anywhere in your codebase. Now, there are times when a default branch is fine and in practice actually necessary, but I recommend you try to stay away from them, and when you really need them always ask yourself what would happen if a new alternative were added to the union type. Default branches may be sort of OK for example when they are associated with the {{undefined}} expression: in that case the addition of a new type would cause a run-time crash which, as already mentioned, is generally not as bad as getting the wrong result.
+
+
+Loops and type inference
+
+As explained before, there's usually no need to explicitly declare local variables as the compiler can, in most cases, automatically infer their type. There are though a few exception to this rule, the most common of which involves variables of a recursive type that are updated inside a loop. We've already seen the {{seq2list(..)}} function:
+
+  type List[T] = empty_list, list(T, List[T]);
+
+  List[T] seq2list(T* xs) {
+    l : List[T];
+
+    l = :empty_list;
+    for x <- xs:
+      l = :list(x, l);
+    ;
+    return l;
+  }
+
+Without the explicit variable declaration {{seq2list(..)}} would not typecheck. In order to understand why, we can try to manually go through the type inference process. After the first instruction {{l = :empty_list;}} the most specific type we can assign to the variable {{l}} is of course the singleton type {{<empty_list>}}. The next statement is the for loop. If we knew that {{xs}} is empty, we could conclude that the type of {{l}} after the loop would still be {{<empty_list>}}, as its body would never be executed. If, on the other hand, {{xs}} contained just one element (and therefore the body of the loop were executed just once) the most specific type we could infer for {{l}} before {{return l;}} would be {{<list(T, empty_list)>}}. If {{xs}} contained two elements that type would become {{<list(T, list(T, empty_list))>}}, if it contained three {{<list(T, list(T, list(T, empty_list)))>}} and so on. But since we don't know how many elements {{xs}} contains, the best type we can infer for {{l}} after the loop has terminated is the union of that (infinite) series of types, which is exactly {{List[T]}}. Unfortunately the compiler is at the moment too dumb to figure that out, and will reject your code if that infinite series of types does not reach a fixpoint after a couple iteractions.
+
+As an alternative to an explicit variable declaration we can define a "constructor" function for {{List[T]}}:
+
+  List[T] list(T h, List[T] t) = :list(h, t);
+
+and rewrite {{seq2list(..)}} as follow:
+
+  List[T] seq2list(T* xs) {
+    l = :empty_list;
+    for x <- xs:
+      l = list(x, l);
+    ;
+    return l;
+  }
+
+The inferred type of {{l}} will now "stabilize" right after the assignment in the loop body, and that will be enough to convince the compiler that the function is type safe.
+Even in the absence of typechecking issues, for data types that consist of only a few fields (unlike, say, the {{WeatherMsrt1}} type we saw earlier) it's a good practice to write constructor functions and use them consistently. You'll get better error messages, a more coincise syntax and other advantages that we will discuss extensively in another chapter.

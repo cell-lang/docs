@@ -1,0 +1,262 @@
+The data model
+
+One of the most important and distinctive features of Cell is the way it represents information. Every piece of information is represented as a value, and only as a value (as opposed to an "object"). All values, of all kinds, share a number of properties:
+
+** Values do not expose their location in memory, or any other form of "identity". If, for example, the values contained in two different variables compare equal, there's no way to tell if the two variables are referring to the same location in memory, or if they are pointing to distinct memory locations that happen to have the same content. This is true for both atomic types, like booleans and integer or floating point numbers, and for composite types, like sequences or records.
+** Every value has a literal, that is, a human-readable representation that can be used to denote that value in the code, and to display or store it in text form. Again, this is true for atomic values ({{false}}, {{42}}, {{3.14159}}) and composite values ({{[0, 1, 2, 3]}}, {{point(x: 12, y: 5)}}) alike.
+** There's no such thing as user-defined equality. The notion of equality is defined by the language itself (it is the most obvious one), for all values, and cannot be overridden. And if two values compare equal, then they can substitute each other in any expression, without changing its result (note that this is in general not true for user-defined equality, or for any kind of "deep" equality in a language with pointers or object ids). This is true even if those values are internally represented in different ways. The same (logical) sequence, for example, could be represented under the hood as an array or a list, depending on the circumstances, but those implementation details do not "leak" into the semantics of the language.
+** Values don't have a type, yet the language is statically typed. That sounds a bit bizarre, I know. Everything will be explained in the next chapter.
+** You cannot define new values. Yes, this too, sounds a bit bizarre. But all the values you can manipulate in Cell are predefined by the language, and developers can only choose from a universal set of values which ones to use. But don't worry, there's everything you need. The language provides you with a number of atomic values (integers, symbols and floating point numbers), and ways to aggregate these atomic values into composite ones, like sequences, sets and records. For an (imperfect) analogy, think of JSON in JavaScript or S-expressions in Lisp.
+** There is no aliasing of any sort, and values are, conceptually at least, immutables entities. You can assign a new value to an existing variable, and, under some specific circumstances, the language will be able to produce a new value by actually updating, under the hood, an existing one, but updating a variable will never result in any observable change in the content of any other variable. An alternative way to put this is to say that the content of a variable can be updated in place, but the language has value semantics for all data structures, including composite ones, so the act of modifying the content of a particular variable never affects other variables.
+
+With all that in mind, let's delve into the details.
+
+
+Atomic values
+
+Integer numbers are 64-bits wide and signed. There are no distinct 8/16/32 bit or unsigned integers, but the compiler is free to use a smaller integer size whenever it can determine that a certain variable will never hold a value that exceeds its bounds (if, for example, the compiler can determine that the range of values a certain variable will ever hold is between 0 and 255, then it's free to use a single byte to store them) and that can, to some extent, be controlled by the programmer with the use of the appropriate type declarations.
+
+Then we have double-precision floating point numbers. They are the same as in any other language.
+
+The third and last kind of atomic values is symbols. Lisp or Ruby programmers are not going to need any explanation here, but for those who are not familiar with those languages, symbols are sort of similar to enum values in languages like C/C++, the main difference being that you don't need to declare them before using them. The syntax is similar to that of Ruby, but is more restrictive: a colon, followed by a lowercase letter, followed by any number of lowercase letters, numbers and underscores. Uppercase letters are not allowed, as are multiple consecutive underscores or trailing ones. Here are a few examples of valid symbols:
+
+  :a
+  :a_symbol
+  :symb_3a
+  :ab12c_3de45
+
+and invalid ones:
+
+  ## :1ab        // Invalid: starts with a number
+  ## :_ab        // Invalid: starts with an underscore
+  ## :ab_        // Invalid: ends with an underscore
+  ## :ab__cd     // Invalid: two consecutive underscores
+  ## :ABC        // Invalid: uppercase letters
+
+In some cases (basically wherever symbols cannot be confused with variable or constant names) the initial colon can be ommitted. (More on this in the following chapters).
+Two symbols, {{:true}} and {{:false}}, are special, in that they are used to represent boolean values. Since they are ubiquitous, there’s no need to write the initial column: they are just written {{true}} and {{false}}, respectively.
+Symbols are internally represented by integer numbers, but the specific numbers used to represent each symbol vary all the time and are just an implementation detail that is hidden from the programmer.
+
+
+Sequences
+
+Sequences are more or less the equivalent of arrays or list in other languages. You can create a sequence by enumerating its elements separated by commas and enclosed by parenthesis. A few examples, starting with the empty sequence:
+
+  ()
+  (0, 1, 2, 3)
+  (:a, :b, 3.14159, 100)
+  (:a, (1, 2, 3, (0.2)), (), (:b, :c))
+
+As an aside, since parenthesis are used to create sequences, when you need to specify the order of evaluation in a complex expression, you have to use braces:
+
+  w = x * {y + z};
+
+The only exception to this rule is boolean expressions, which cannot contain sequences so in that particular case you are free to use either parentheses or braces, as you prefer. The following two expressions are both valid, and completely equivalent:
+
+    e = (a and b) or (c and d);
+    e = {a and b} or {c and d};
+
+Like all collection types, sequences can hold any kind of values, and can therefore also be used as tuples, that is, fixed-length sequences of heterogeneous values.
+
+
+Sets
+
+Sets differ from sequences in that the order of the elements doesn't matter, and duplicates are eliminated. They are enclosed in brackets:
+
+  []  // The empty set
+
+  // Two different ways to write the same set.
+  // The order of the elements doesn't matter
+  [5, 12, 1, 6]
+  [12, 6, 1, 5]
+
+  // The set whose only element is the number 1
+  // Duplicates are ignored
+  [1, 1, 1]
+
+  // A set containing values of different types
+  [:a, (1, 2, 3), [0.51, :b], ([])]
+
+
+Binary relations
+
+A binary relation is an unordered collection of (ordered) pairs of values, or in a more mathematical parlance, it is a subset of the cartesian product of two arbitrary sets (the definition of both sets and relations in Cell is basically the same as the standard mathematical one, if we restrict our attention to finite data structures only). Just like with sets, duplicates are eliminated. They are written between brackets, with pairs separated by a semicolon and elements of each pair separated by a comma. The empty relation is denoted by an empty pair of brackets, and it is exactly the same entity as the empty set.
+
+  []  // The empty relation (and also the empty set)
+
+  // A relation between integers and symbols
+  [0, :zero; 0, :nil; 1, :one; 2, :two]
+
+  // A relation associating the numbers 1, 4
+  // and 9 with all their square roots
+  [1, 1; 1, -1; 4, 2; 4, -2; 9, 3; 9, -3]
+
+One syntactical oddity is that, in order to distinguish them from a two-element set, binary relations that contain only one pair have to be written with a semicolon before the closing bracket:
+
+  [0, 1]  // The two-element set containing 0 and 1
+  [0, 1;] // The binary relation containing the single pair 0, 1
+
+Just like any other collection type, relations can contain any value, including composite ones:
+
+  [ :alice,                                 (0, (1, (2, ())));
+    [1, 2, 3],                              (3, 2, [0, []]);
+    [:a, :b; :c, 3.14159],                  :bob;
+    [[:a, :alpha; :b, :bravo], [2.71828]],  0
+  ]
+
+
+Maps
+
+Maps (or associative arrays) are an important special case of binary relations: a binary relation is a map if and only if no two pairs in the relation have the same left element, or, using the terminology of relational databases, if the first column is a key for the relation. Another way to say that is that a map is a set of key/value pairs where each key is unique, and that a generic binary relation is more like a "multimap", since it may associate more than one value to any given key.
+One important thing to keep in mind is that you can apply to a map any operation that you would apply to a binary relation (since a map is a binary relation), but there are a few extra operations you can apply to a map that don't make sense in the more general case of a generic binary relations, such as looking up a value given its corresponding key.
+Maps also have a special syntax, where you use an arrow to separated the key from the value and commas to separate pairs:
+
+  // A map from integer numbers to symbols
+  [0 -> :a, 1 -> :b, 2 -> :c, 3 -> :d]
+
+  // A map with just one entry
+  [:pi -> 3.14159]
+
+The above notation is completely equivalent to {{[0, :a; 1, :b; 2, :c; 3, :d]}} and {{[:pi, 3.14159;]}}, but it is used to guarantee that the value is actually a map in expressions containing variables: if {{w}}, {{x}}, {{y}} and {{z}} are variables, the two expressions {{[w, x; y, z]}} and {{[w -> x, y -> z]}} will produce exactly the same value if {{w}} is different from {{y}}, but the latter will fail if they are equal, while the former will succeed in either case.
+
+Also note that every singleton binary relation is a map, so you can avoid the syntactic quirk for one-entry relations described above by using the map notation:
+
+  [0, 1]      // The two-element set containing 0 and 1
+  [0, 1;]     // The binary relation containing the single pair 0, 1
+  [0 -> 1]    // Same as [0, 1;]
+
+
+Records
+
+Just like maps are a special case of binary relations, records are a special case of maps. A map is a record if (and only if) all of its keys are symbols. Since records are ubiquitous, they have their own syntactic sugar:
+
+  // Syntactic sugar for [:left -> -1.2, :right -> 7.5]
+  // and [:left, -1.2; :right -> 7.5]
+  (left: -1.2, right: 7.5)
+
+  // Same as [:x -> 15, :y -> 4, :z -> -7]
+  // and [:x, 15; :y, 4; :z -> -7]
+  (x: 15, y: 4, z: -7)
+
+  // Same as [:ro -> 2.0, :theta -> 1.5708]
+  // and [:ro, 2.0; :theta, 1.5708]
+  (ro: 2.0, theta: 1.5708)
+
+Note that they are enclosed in parenthesis (not brackets), that key and value are separated by a colon and that symbol keys are written without any preceding colon. Remember also that since records are maps, which in turn are relations, all the operations that can be applied to binary relations and maps can also be applied to records, but not vice versa.
+
+
+Tagged values
+
+The only type of composite value that is not a collection type is the tagged value. Tagged values are built by joining together a symbol (called the tag) and another value. The tag is written first, followed by the value enclosed in parentheses. A few examples:
+
+  :meters(200)
+  :seconds(3600)
+  :point((x: 10, y: 25))
+  :rectangle((left: -10, right: 20, top: 50, bottom: 30))
+
+Just like for symbols, there are contexts (that will be described later) where the initial colon is not required. There's also a bit of syntactic sugar: when the value enclosed between parentheses is a sequence or a record, there's no need to type the second set of parentheses. Also, if the value being tagged is a record, and the second pair of parentheses is omitted, the colon preceding the tagging symbol has to be omitted as well (in all contexts). A few examples:
+
+  // Syntactic sugar for :point((x: 10, y: 25))
+  point(x: 10, y: 25)
+
+  // Syntactic sugar for :person([:name -> "John", :age -> 25])
+  person(name: "John", age: 25)
+
+  // Syntactic sugar for :vector_3d((0.5, 0.3, 1.2))
+  :vector_3d(0.5, 0.3, 1.2)
+
+  // Syntactic sugar for :a_tag((10, (:a, :b), []))
+  :a_tag(10, (:a, :b), [])
+
+For reasons that we'll see later, when using records in Cell it's often necessary to tag them with a symbol (ideally one that describes their purpose).
+
+
+Ternary relations
+
+Ternary relations are just like binary relations, but they contain triples instead of pairs. The syntax is identical, including the same quirk for single-entry relations:
+
+  // Driving distances between cities, in kilometers
+  [ :new_york,        :boston,        346;
+    :san_francisco,   :los_angeles,   617;
+    :las_vegas,       :phoenix,       479;
+    :seattle,         :portland,      279;
+    :miami,           :orlando,       380
+  ]
+
+  [ "Usain Bolt",         100,    9.58;
+    "Usain Bolt",         200,   19.19;
+    "Wayde van Niekerk",  400,   43.03;
+    "David Rudisha",      800,  100.91
+  ]
+
+  ["Usain Bolt",  100,  9.58;]    // Singleton ternary relation
+
+Also, the empty ternary relation is the same entity as the empty set and the empty binary relation, that is, all unordered collection types share the same empty value:
+
+  []  // The empty set/relation, for any relation arity
+
+The language is meant to provide, once it's fully implemented, relations of arbitrary arity, but for now unary (i.e. sets), binary and ternary relations are all there is.
+
+
+Strings
+
+Strings in Cell are ordinary values built using the mechanisms seen above. The only special thing about them is that they have some syntactic sugar like in any other language. At their core, strings are just sequences of non-negative integer numbers, where each number is the ASCII/Unicode value of the corresponding character, tagged with the symbol {{:string}}. In their syntactically "sugared" representation, they are enclosed in double quotes. The following are different ways of writing exactly the same value:
+
+     "Hi there!\n"
+     :string(72, 105, 32, 116, 104, 101, 114, 101, 33, 10)
+     :string((72, 105, 32, 116, 104, 101, 114, 101, 33, 10))
+
+There are five special escape codes, {{\n}}, {{\t}}, {{\r}} {{\"}} and {{\\}}, and the generic numeric one, a backslash followed by exactly four hexadecimal digit, {{\XXXX}}, where the four digits represent the 16-bit character Unicode code point. If you need to use Unicode characters whose code point is equal to or higher than {{2^16}} and cannot be represented by a 16-bit number, for now you'll have to use the more cumbersome standard notation for values, without the syntactic sugar.
+
+There's no separate character type, each character can be represented either by an integer number (its Unicode code point) or by a one-character string (more on this when we talk about types).
+
+
+Physical implementation
+
+In the above description, we didn't say anything about how collection values are actually implemented under the hood, even though that's obviously important for the programmer to know. That's because the language itself does not prescribe any specific implementation, so that the compiler is free to choose between different data structures, with different performance characteristics and different time/space trade-offs, and to dynamically switch between them depending on how they are actually used.
+
+Take, for example, sequences. The abstract concept of sequence, that is, a collection of values, some of them possibly repeated, that are arranged in a linear order, can be implemented as an array, or a linked list, or a rope, or a combination of them, or something else entirely. All those implementation are conceptually equivalent, and only differ in their performance characteristics.
+
+Now, many of the design goals of Cell depend on it being a very data-oriented language, in the sense of having a simple, uniform, human-readable and ideally unique representation for (almost) any piece of information. And exposing all these implementation details (list vs rope vs array vs something else) obviously goes against those goals. So the task of choosing the actual implementation at any given time has to necessarily fall on the compiler and the language runtime, and the programmer can control it only indirectly by carefully choosing (if need be) which operations to use in his or her algorithms.
+
+Sequences, for instance, are currently implemented as arrays, and consequently support fast random access and (functional) insertion at the end. But in the future the runtime will make use of either arrays or ropes, and will be able to switch dynamically between these two forms, depending on how these data structures are used. For example, if you are creating a long sequence by recursively concatenating smaller sequences, the runtime might choose to represent them as ropes, in order to make concatenation O(1). But the moment you start accessing its elements by index, it might rearrange the content of the sequence into an array, in order to support fast random access. If you wanted, for example, to induce the runtime to use only arrays (for whatever reason), one way to do so would be to build that long sequence by only appending new elements at the end, an operation that can be performed efficiently with arrays.
+
+That doesn't mean of course that you cannot implement you own data structures on top of the existing ones, if the circumstances require it. You could, for example, define a your own set or map types using the language provided types as primitives, if the native versions don't meet your needs, and there are indeed times when you would actually have to do so. But in all other cases, letting the compiler/runtime do the low-level work will make your code simpler, and your data easier to inspect and manipulate.
+
+Another data structure (or, rather, set of data structures) that benefits greatly from a clear distinction between logical definition and physical implementation is records. Remember that records in Cell are just a special case of maps, which in turn are just a special case of binary relations. This provides the ability to treat records as generic maps and, for example, to merge them (in a type-safe way: more on this later) or to build them up dynamically. On the other hand, though, representing records as maps at the physical level (which is what the compiler currently does) is nowhere as efficient as using ad-hoc data structures. But a future version of the compiler will be able to take advantage of type information (since Cell is statically typed) to store each type of records in its own specific low-level data structure, just like all statically typed languages do, and to transparently switch between the optimized and generic representations whenever needed.
+
+Similar considerations apply to all other collection types as well. Sets are currently implemented as sorted arrays of their elements, which is reasonably efficient when building immutable sets in just one go, but does not allow (functional) insertion or removal of elements (removing or adding an element requires rebuilding the entire set). This is of course only temporary, and the final implementation will make use of either sorted arrays or balanced trees (or a combination of them), depending on the circumstances.
+
+Just like sets, maps and binary or ternary relations are currently implemented as sorted arrays of their elements. They support fast search based on any combination of arguments, but have to be built at once, since adding or removing an entry currently involves creating an entirely different collection. Maps will soon provide a balanced tree implementation as well though, with O(log(n)) insertion and deletion.
+
+As we'll see in another chapter, static automata can contain "mutable" relation variables. Those variables contain, conceptually speaking, ordinary relation values, but they are restricted in the way they can be used, so that they can be updated in place without compromising the functional nature of the language. In that case, the compiler uses a completely different implementation approach, in order to support both efficient insertion of new tuples and deletion of existing ones.
+
+One intrinsic limitation of both native sets and relations though is that they are unordered containers, and will never be able to support operations that require an ordering of the elements of the collections, except maybe in very specific cases, such as sets of integers, or maps with integer keys. That's because these data structures must be able to contain any type of value and to work even when no explicit ordering criteria has been provided, so even though they do, in some cases, keep their elements sorted, they have to rely on an internal notion of ordering that is not meaningful to the user. That's actually one of the cases in which you might need to use custom data structures.
+
+
+Design rational
+
+Before moving on to the subject of types, I wanted to offer some rational for the design of Cell's data model. The language makes a number of unusual choices for a statically typed language, and we are now going to examine some of the pros and cons that such choices involve. I'll avoid any mention of the role of relations (and the absence of pointers/object ids and aliasing), which is so important a subject that it deserves to be discussed at length elsewhere, and I'll focus here instead on the structural nature of the data model. To recap what we have learned so far:
+
+** The set of all values the language can represent is fixed and cannot be extended.
+** This universal set of values is defined structurally, starting from a set of atomic values that can be aggregated in various ways to form more complex, composite values.
+** Composite values can always be "disaggregated" into their component parts.
+** Logical definition and physical representation are distinct. Physical implementation details cannot be "observed" within the language.
+
+The first interesting consequence is that it becomes possible, and actually relatively easy, to define universal functions that can operate on any value, without restrictions. Functions that, for example, calculate a hash code for any value, store it in an arbitrary binary format or generate its textual representation are both short and very easy to write. These functions know in advance all the possible cases they will ever have to deal with (since the set of values is fixed) and can easily disaggregate composite values into their constituent parts.
+It is true, of course, that even commonly used languages like Java and C# can, to some extent, do similar things using their reflection/introspection API: it is more complicated, and it may not always work (what happens, for example, when a serialization function that makes use of the reflection API is applied to an object of a class (maybe one defined in the system libraries) that is either built-in, or partially defined in C? Will it still work?) but it can at least be made to work well enough in most situations.
+
+Other cases, though, tend to be far more difficult for those languages to handle. Consider, for example, the problem of deserializing data. Writing in Cell a function that can build any value from its textual representation (or, more generally, from a serialized form) is a bit more complicated that writing the corresponding printing/serialization function (because parsing is intrinsically more complex than printing), but it is still straighforward and works 100% of the time.
+This is not true for, say, Java or C#. What if, for example, the serialized data contains objects of a class that is not defined in the application that is trying to load that data? Or if that class is present, but has a different definition, maybe because the serialized data was created by an earlier version of the same application? Even the much simpler task of converting data from a relational database into native data structures, a process that is absolutely trivial in Cell, is a huge hassle in those languages.
+
+In a language that supports features like orthogonal persistence and the ability to "replay" the execution of a program, any limitation in the ability to deal with data whose structure is unknown, or only partially known, would be too crippling (for reasons that will be extensively discussed in the following chapters) and a nominative data model/type system is just not an option.
+
+The problems created by non-structural languages are not limited to the handling of persisted data. Consider, for instance, data manipulation operations like merging records, adding or removing fields from them, or performing the equivalent of relational algebra operations like "project" or "join". What they all have in common is that they implicitly create new "types" of data structures. Nominative languages that prevent you from using data structures you've not explicitly declared severly limit your ability to use those declarative and low-ceremony data manipulation operations.
+
+There are, sure, some clumsy workarounds. C#, for example, has this weird notion of anonymous types (often used in LINQ expressions), which, being anonymous, cannot even be passed around to other functions in a type-safe way, and cannot have polymorphic methods. Many other languages provide tuple types, which inject limited structural capabilities into an otherwise nominative type system, and in some cases even structural records. But none of these workarounds can match the flexibility offered by a fully structural approach.
+
+Of course, not all is perfect and wonderful in the land of structural types, and there are trade-offs to be accepted if one chooses to go down that way. Probably the most important one is the complete lack of encapsulation, at least in the conventional sense. In Cell, values are entirely transparent, and can be inspected and manipulated without restrictions. Only their physical representation is hidden from view. The language does provide an important abstraction mechanism, protocols, but that's more the equivalent of "programming against an interface" that real encapsulation. But anyway, encapsulation (or lack thereof) is such an important topic that it deserves to be discussed separately, once we have a full picture of the language.
+
+Structural vs nominative debate aside, you might have noticed a major omission in the data model: closures. While the language does support closures, they cannot be mixed with normal data. The reason for this is simple enough: in Cell it must be possible to easily do things like serializing a value, recreating it from its stored form, sending it through a network connection to a different application, displaying it to the user in a human-readable format and even using it to exchange data with applications written in different languages, without resorting to some external, alien data format like JSON. But once you throw closures into the mix, all that becomes really hard. It's not just difficult to implement: it's also conceptually problematic. If, for instance, you store (or send through a pipe or network connection) a closure that calls other functions, which in turn call other functions and so on, you'll have to send the entire call graph, or different applications (or even different versions of the same application) may not be able to reconstruct it. And if you persistently store a closure (or a function that is, directly or indirectly, called by it), and that closure/function has a bug, how do you get rid of it? More generally, if you load a closure created by, say, an older version of your applications, and some of the functions stored within it have since changed, how will the different versions interact? Couldn't that be a potential source of really nasty bugs?
+In addition to all that, closures and functions do not support any meaningful notion of equality, and that's a problem in a language where data structures that heavily rely on it, sets and relations, are so pervasive.
+So, given that closures clearly have properties that differ drastically from those of normal data, the choice of segregating them in a separate cage seems to be the most sensible one, even though that certainly reduces the expressiveness of the language.

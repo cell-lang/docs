@@ -1,0 +1,588 @@
+Reactive automata
+
+In this chapter we'll examine the other type of automata provided by the language. As already mentioned in the overview reactive automata should be regarded as a niche feature and at this stage also as an experimental one, whose design may change radically in the future. In order to explain how they work we'll make use of a simple automation problem, that is illustrated in the following picture:
+
+{#{mine-pump.svg}#}
+
+In this example we need to pump water out of a mine sump. In order to detect the level of the water we have two water sensors, {{L}} and {{H}}. We want to start pumping water out of the sump we the water reaches the higher sensor, {{H}}, and continue until the level returns below the level of the lower sensor, {{L}}. We also have three gas sensors to measure carbon monoxide ({{C}}), methane ({{M}}) and airflow ({{A}}) levels. If any of them becomes critical the operator must be alerted. Finally, in order to prevent explosions, the pump cannot be operated when the methane level exceeds a certain critical threshold.
+
+Our task is to implement the controller logic, which reads the inputs signals from the various sensors and outputs the ones that control the pump and alert the operator. We'll proceed gradually, starting with something very simple and then gradually including additional features. Here's the first version of our code:
+
+  reactive MineController {
+    input:
+      lower_sensor_submerged : Bool;
+      upper_sensor_submerged : Bool;
+
+      methane_level : Int;
+      co_level      : Int;
+      airflow_level : Int;
+
+    output:
+      pump_on           : Bool;
+      evacuation_needed : Bool;
+      error_detected    : Bool;
+
+    state:
+      needs_draining : Bool = upper_sensor_submerged;
+
+    static:
+      max_methane_level : Nat = 10;
+      max_co_level      : Nat = 20;
+      min_airflow_level : Nat = 100;
+
+    rules:
+      // Setting needs_draining when the water submerges the
+      // upper water sensor and resetting is when the water
+      // level falls below the level of the lower water sensor
+      needs_draining = true  when upper_sensor_submerged;
+      needs_draining = false when not lower_sensor_submerged and
+                                  not upper_sensor_submerged;
+
+      // Checking whether methane, carbon monoxide
+      // and airflow levels are critical
+      methane_level_critical = methane_level > max_methane_level;
+      co_level_critical      = co_level > max_co_level;
+      airflow_level_critical = airflow_level < min_airflow_level;
+
+      // The atmosphere is not safe if the readings of the
+      // gas sensors stay critical for more than 30 seconds
+      atmosphere_critical = methane_level_critical or
+                            co_level_critical or
+                            airflow_level_critical;
+      unsafe_atmosphere = atmosphere_critical for 30s;
+
+      // The pump must be on if draining is needed and the
+      // level of methane is below some critical threshold
+      pump_on = needs_draining and not methane_level_critical;
+
+      // If the upper water sensor detects the presence
+      // of water but the lower one doesn't, then there's
+      // a problem with at least one of them
+      error_detected = upper_sensor_submerged and
+                       not lower_sensor_submerged;
+
+      // Once water reaches the upper sensor and the pump is
+      // switched on, we expect the water level to drop below
+      // the level of the sensor within 5 minutes. If it doesn't
+      // we conclude the pump is not working as expected.
+      pump_not_working = upper_sensor_submerged for 300s;
+
+      // The mine must be evacuated if safety requirements are not met
+      evacuation_needed = unsafe_atmosphere or pump_not_working;
+  }
+
+The definition of a reactive automaton starts with the {{reactive}} keyword and the name of the automaton which follows the same syntactic conventions as the names of types and schemas. The block that follows consists of five sections, {{input}}, {{output}}, {{state}}, {{static}} and {{rules}}. Some of these sections may be missing, but if they appear at all they've to be in this exact order (if you write them down in the wrong order, the current version of the compiler will produce a very unhelpful and confusing error message, so beware).
+
+The first two blocks, {{input}} and {{output}}, declares all the input or output signals the automaton consumes or produces, with their respective types. The next one, {{state}}, declares the variables that constitute the automaton state along with their types and initial values. {{static}} only contains constant declarations. The last section, {{rules}}, is the most interesting one, as it containts most of the logic of the automaton.
+
+The inputs are self-explanatory: each of them corresponds to one the the arrows that go into the {{controller}} box in the picture. For simplicity we used basic types like booleans for the water sensors and integers for the gas ones. In a real application one would probably have to choose user-defined types, to account for things like read errors and so on. We also ignored the unit of measurement in the case of the gas sensors.
+
+The first output, {{pump_on}}, is the signal that controls the pump. It's represented by the dashed line that goes from the {{controller}} box to the {{pump}}. The pump should be on whenever {{pump_on}} is true, which means that if the pump is working properly it should be switched on every time {{pump_on}} becomes true (that is, every time it goes from false to true) and when the system is started if its initial value is true, and it should be switched off when {{pump_on}} becomes false, and of course when the whole system is switched off.
+
+The other two outputs, {{evacuation_needed}} and {{error_detected}} are represented by the other dashed line in the figure, and they are meant for the operator of the mine, or for the alarm system. {{evacuation_needed}} becomes true whenever the atmosphere becomes unsafe or the pump is not draining the sump as expected. {{error_detected}} is a diagnostic signal that is activated when the readings coming from the water level sensors are inconsistent.
+
+
+Derived signals
+
+The {{rules}} section can contain several different types of rules, that can be classified in two main groups: those that define new derived signals, and those that update the automaton's state variables. Examples of the simplest way to define a derived signal are {{methane_level_critical}}, {{pump_on}} and {{evacuation_needed}}, among others. The expression on the right of the equals sign, which defines the value of the signal, will normally reference other signals defined in the same automaton. Whenever the value of those source signals changes the derived signal is updated as well. Signals are updated in topological order: a signal is guaranteed to be updated only after all the signals it depends on have been updated as well. In order to make this work, there obviously cannot be circular dependencies among signals.
+
+It's important here to clarify what we mean when we say that a signal has "changed". Let's use {{methane_level_critical}} as an example: if the value of {{methane_level}} goes, say, from {{2}} to {{5}}, the value of {{methane_level_critical}} is recalculated, but its new value will be the same as the old one. In Cell, this is not considered a change at all: the only thing that matters is whether the new value is equal to the old one or not. A recalculation that does not produce a different value is ignored, and does not trigger any other downstream update. For basic rules like {{methane_level_critical}}, {{pump_on}} and so on this only affects the efficiency of the code, but for other, more complex types of rules that we'll discuss later the semantics of the language is affected as well.
+
+
+Timed boolean signals
+
+Boolean signals can also be made aware of the passing of time. An example is the definition of {{pump_not_working}}:
+
+  pump_not_working = upper_sensor_submerged for 300s;
+
+The definition of a time-aware boolean signal requires two things: a source boolean signal (which can be an arbitrary boolean expression) and a time expression ({{300s}} in the example). The derived signal is true if and only if the source boolean signal is true now and has been true uninterruptedly for the amount of time specified by the time expression. In our example, for as long as {{upper_sensor_submerged}} is false {{pump_not_working}} is false as well. When {{upper_sensor_submerged}} becomes true (or when the automaton is started, if the initial value of {{upper_sensor_submerged}} is true), though, an internal timer is set, which in this case is set to expire after 300 seconds. If before the expiration of the timer the value of {{upper_sensor_submerged}} goes back to false, the timer is just deleted and nothing happens. Otherwise, once the timer expires the value of {{pump_not_working}} is switched to true, and it stays like that until {{upper_sensor_submerged}} becomes false again.
+
+There's also another more general type of time-dependent signal definition:
+
+  unchanged_for_30_seconds = a_signal after 30s;
+
+Here the derived signal ({{unchanged_for_30_seconds}}) is true if and only if the value of source signal ({{a_signal}}) has not changed for the specified amount of time. Here the source signal can be an expression of any type, not just boolean. And as we explained in the previous paragraph, in Cell a signal "changes" if and only if its value does, and recalculations that don't change the actual value are just ignored.
+
+Time spans can also be expressed in milliseconds. The following definitions, for example, are equivalent:
+
+  s2 = s1 for 30s;
+  s2 = s1 for 30000ms;
+
+Time expressions can also be "flipped" with the use of the {{not}} operator:
+
+  s3 = s1 for not 30s;
+
+The {{not}} operator should read "less then": {{s3}} is true if and only if {{s1}} is true now but it has been true for less than 30 seconds. Note that when {{s1}} is true the values of {{s2}} and {{s3}} as defined above are at any given time the negation of each other, but they are both false when {{s1}} is false. You can also combine time expressions with the {{and}} and {{or}} operators:
+
+  // {{s4}} is true if and only if {{s1}} is true now and has been
+  // true for at least 2 seconds but less than 5
+  s4 = s1 for 2s and not 5s;
+
+  // {{s5}} is true if and only if {{s1}} is true now and has been
+  // true for less then 1 second or for at least 4
+  s5 = s1 for not 1s or 4s;
+
+  // {{s6}} is true if and only if {{s1}} is true not and has been
+  // true either for at least 1 second and less than 2
+  // or for at least 3 seconds and less than 4
+  s6 = s1 for (1s and not 2s) or (3s and not 4s);
+
+You can also repeat an activation pattern over time using the {{every}} keyword. The following example generate a sort of "square wave" with the value of {{s7}} starting at false and changing every second, and {{s1}} acting as a switch:
+
+  s7 = s1 for 1s every 2s;
+
+
+State variable updates
+
+The last and most complex type of rule used in {{MineController}} is a state variable update, of the form:
+
+  var = expr when cond;
+
+The assignment is executed only when {{cond}} becomes true, that is, every time its value goes from false to true. This means that the rule is never executed when the automaton is initialized, even if the initial value of {{cond}} is true, since there's no "previous" value to compare it to. Instead, the first time an automaton is updated, all state variables are initialized to the value provided with their declaration:
+
+  needs_draining : Bool = upper_sensor_submerged;
+
+In the intialization expression you are allowed to reference other signals, as long as that does not create circular dependencies. Multiple rules can target the same state variable, and that's what actually happens with {{needs_draining}} in our example. It's the programmer's responsibility to make sure that no two rules targeting the same state variable can fire at the same time. If that happens, it's treated as a runtime error and it's dealt with using the standard error-handling mechanism that we'll examine later.
+
+There's also a more general form of the update rule, shown here:
+
+  var = expr if cond : signal;
+
+The above rule is triggered every time {{signal}} changes: whenever it does {{cond}} is first evaluated, and if it's true then the assignment is actually executed. Here {{signal}} has to be the name of a signal, and cannot be an arbitrary expression. The condition that follows the {{if}} keyword is called a guard, and you're allowed to omit it if you don't need it. The following two rules are equivalent:
+
+  var = expr : signal;
+  var = expr if true : signal;
+
+You can specify more than one signal to watch after the semicolon:
+
+  var = expr if cond : signal_1, signal_2;
+
+The above rule will fire only when both {{signal_1}} and {{signal_2}} change at the same time. You can also use the {{not}} operator when combining multiple signals:
+
+  // Will fire only when {{signal_1}} and {{signal_2}} change simultaneously
+  var = expr : signal_1, signal_2;
+
+  // Will fire only when {{signal_1}} changes but {{signal_2}} doesn't
+  var = expr : signal_1, not signal_2;
+
+  // Will fire only when {{signal_2}} changes but {{signal_1}} doesn't
+  var = expr : signal_2, not signal_1;
+
+It goes without saying that a watch list containing only negated signals would make no sense, and is not accepted by the compiler, which also expects all unnegated signals to be specified before the negated ones.
+
+The first type of rule we examined is just syntactic sugar for the more general form:
+
+  var = expr when cond;
+
+is rewritten by the compiler as
+
+  var = expr if cond : cond;
+
+if {{cond}} is the name of a signal, or
+
+  hidden_signal = cond;
+  var = expr if hidden_signal : hidden_signal;
+
+if {{cond}} is a more complex expression. All types of state variable updates never fire during initialization, they only respond to changes in the value of the signal, and as already explained during initialization there's no previous value to compare it to.
+
+
+Error handling
+
+Unlike static ones, reactive automata have no support for transactions, and once you work through a few examples, it's easy to see why. Instead, if the evaluation of an expression fails during the execution of a rule, the target signal simply enters a special "undefined" state, which is then propagated to all the signals that depend on it, either directly of indirectly. If for example in the following code the evaluation of {{f(s0)}} failed, not only {{s1}} but also {{s2}}, {{c}} and {{v}} would become undefined:
+
+  s1 = f(s0);
+  s2 = g(s1);
+  c = s2 after 5ms;
+  v = h(s0, s1) if p(s0) : s1;
+
+A state variable in particular becomes undefined if any of the signals being watched by any of the rules that update it become undefined. If all watched signals are defined, and a rule is triggered, the target variable becomes again undefined if the evaluation of the guard fails, or otherwise if the guard is true (or if there's no guard at all), and the evaluation of the expression that defines the new value of the variable fails. Finally, a state variable becomes undefined if two different rules fire at the same time.
+
+Once a derived signal enters an undefined state, it stays there until it's successfully recalculated, as a consequence of an input changing its value or a timer being triggered. Once that happens, the signal resumes its normal functioning, until of course another error occurs. For a state variable (and all signals that depend on it), though, a recovery is not always possible. Here's an example:
+
+  reactive ChangeCounter {
+    input:
+      signal : Any;
+
+    output:
+      changes : Int;
+
+    state:
+      changes : Int = 0;
+
+    rules:
+      changes = changes + 1 : signal;
+  }
+
+{{ChangeCounter}} simply counts how many times its only input signal has changed since the automaton instance was created. If {{signal}} becomes undefined, obviously {{changes}} has to become undefined as well, and that's unfortunately irreversible. Even if later {{signal}} returns to a normal state, it's impossible for {{changes}} to ever recover, because the expression that calculates the new value depends on the previous undefined one.
+
+This error propagation process is entirely automatic and cannot be controlled by the programmer in any way. You cannot even check, inside a reactive automaton, whether a signal is defined or not: only the client of the automaton can check whether any of its outputs are undefined. An important consequence is that this error handling mechanism is only good for dealing with programming errors, not with missing input values. In the case of the mine controller, for instance, if you get an error when trying to read the state of a water level sensor, it might be tempting to set the corresponding input (either {{upper_sensor_submerged}} or {{lower_sensor_submerged}}) in an undefined state and rely on the language built-in error propagation, but doing so would prevent you from implementing your own error handling policy: it might for example be the case that an occasional bad reading is nothing to worry about and can be safely ignored. In order to do that, you would have to use a {{Maybe}} type for the input (with {{nothing}} indicating a bad read), or even better to define your own type for sensor readings, which could encapsulate some of the error-handling logic.
+
+
+Nested automata
+
+Reactive automata can of course be nested inside one another. Using {{needs_draining}} in {{MineController}} as an example, you might want to encapsulate both that particular piece of state and the logic that updates it in its own automaton. {{needs_draining}} is essentially a switch, that is turned on when the level of the water reaches the upper sensor, and off when it drops below the lower one. So we could start by writing a {{Switch}} automaton:
+
+  reactive Switch {
+    input:
+      switch_on  : Bool;
+      switch_off : Bool;
+
+    output:
+      is_on : Bool;
+
+    state:
+      is_on : Bool = switch_on;
+
+    rules:
+      is_on = true  when switch_on;
+      is_on = false when switch_off;
+  }
+
+The two input signals {{switch_on}} and {{switch_off}} control the activation/deactivation of the switch, whose state is stored in {{is_on}}. Note that the input signals are not supposed to ever be true at the same time: if that happens the state of the switch becomes undefined. Now the following lines of code in {{MineController}}:
+
+  state:
+    needs_draining : Bool = upper_sensor_submerged;
+
+  rules:
+    needs_draining = true  when upper_sensor_submerged;
+    needs_draining = false when not lower_sensor_submerged and
+                                not upper_sensor_submerged;
+
+could be replaced by:
+
+  rules:
+    draining_switch = Switch(
+      switch_on  = upper_sensor_submerged,
+      switch_off = not lower_sensor_submerged and
+                   not upper_sensor_submerged
+    );
+    needs_draining = draining_switch.is_on;
+
+As you can see, the definition of a nested automaton looks a bit like a function call with named arguments, and here the instance of {{Switch}} is bound to the name {{draining_switch}}. You can read its outputs using the same syntax you would be using for accessing the fields of a record: {{draining_switch.is_on}}.
+
+For simple cases like this one, with only a few inputs and a single output, there's also a bit of syntactic sugar, and {{Switch}} can be rewritten as follow (the part between the braces is unchanged):
+
+  reactive Switch switch_on, switch_off -> is_on {
+    ...
+  }
+
+Now {{needs_draining}} can be defined like this, with no semantics differences:
+
+  needs_draining = Switch(
+    upper_sensor_submerged,
+    not lower_sensor_submerged and not upper_sensor_submerged
+  );
+
+The {{switch_on, switch_off -> is_on}} text basically states that the inputs of {{Switch}} can be provided positionally in the specified order, and that the name {{needs_draining}} is bound not to the automaton instance itself, but rather to its only output. You can also choose to have just the positional inputs, or just the default output:
+
+  // Just the positional inputs
+  reactive Switch switch_on, switch_off {
+    ...
+  }
+
+  // Just the default output
+  reactive Switch -> is_on {
+    ...
+  }
+
+Even when an automaton has positional inputs, you can always choose to provide them by name, if you think that makes the code more readable. The list of positional inputs does not have to include all inputs: you can have some of them provided positionally, and others by name. For instance, given the following automaton:
+
+  reactive MyAuto input_1, input_2 {
+    input:
+      input_1 : Type1;
+      input_2 : Type2;
+      input_3 : Type3;
+      input_4 : Type4;
+
+    ...
+  }
+
+that's how you would declare an instance of it:
+
+  my_auto = MyAuto(expr_1, expr_2, input_3=expr_3, input_4=expr_4);
+
+
+Discrete signals
+
+All the signals we've seen so far are continuous, that is, they are defined at any given point in time and the automaton reacts to changes in their value. But there's another type of signals, discrete signals. Discrete signals are usually dormant, and when they're in this state there's absolutely nothing you can do with them: you can't even read their value, because they don't have one. They only activate at specific points in time, and the automaton reacts to their activation. They are meant to represent streams of events and other inputs that continuous signals cannot model in a natural way. As an example we'll create an automaton that takes as input a stream of characters and breaks them into lines. It has a single discrete input, {{char}}, and a single discrete output, {{line}}:
+
+  reactive Lines char -> line {
+    input:
+      char* : Nat;
+
+    output:
+      line* : String;
+
+    state:
+      buffer : Nat* = ();
+
+    rules:
+      // The state variable buffer is updated every time {{char}} is active
+      buffer = if char != new_line then (buffer | char) else () : char;
+
+      // {{line}} is a derived discrete signal that is defined only
+      // when {{char}} is active and its value is 10 (new line)
+      line := :string(@buffer) if char == new_line : char;
+  }
+
+Discrete inputs and outputs are declared just like their continuous counterparts, except for the fact that their name is followed by an asterisk, {{a_signal* : Type}} instead of {{a_signal : Type}}. The first rule in {{Lines}} prescribes how the state variable {{buffer}} is to be updated every time the {{char}} input is active. As you can see a state variable update that involves discrete signals is syntactically the same as one that makes use only of continuous ones, but the semantics is a bit different: if a continuous signal appears (without negation) in the list of watched signals on the right, that means the rule has to be triggered when the value of the signal changes, but if the signal is discrete the rule has instead to be triggered whenever it is active. Just like continuous ones, discrete signals can be negated, meaning that the rule is triggered only if the signal is not active, and you can freely mix discrete and continuous signals in a list of triggers.
+
+There's also a bit of syntactic sugar: if the list of watched signals contains only one signal, and this signal is discrete and also appears either in the guard or in the expression that calculates the new value of the state variable, then you can omit the list of watched signals entirely. The rule that updates {{buffer}} in {{Lines}}, for instance, can be written more coincisely like this:
+
+  buffer = if char != new_line then (buffer | char) else ();
+
+Note that this syntactic sugar cannot be used if a rule references more than one discrete signal: there has to be exactly one. That's because rules that have more than one discrete trigger tend to be trickier to handle, and usually the various possibilities have to be handled separately:
+
+  state_var = expr_1 : discrete_signal_1, discrete_signal_2;
+  state_var = expr_2 : discrete_signal_1, not discrete_signal_2;
+  state_var = expr_3 : discrete_signal_2, not discrete_signal_1;
+
+The second rule in {{Lines}} shows how to define a derived discrete signal. It's very similar to updating state variables, with the only syntactic difference being the use of {{:=}} instead of {{=}}. The bit of syntactic sugar that allows you to omit a list of triggers that consists of a single discrete signal can be used here as well:
+
+  line := :string(@buffer) if char == new_line;
+
+Note the use of {{@buffer}} instead of just {{buffer}}. The {{@signal}} notation is used to access the pre-update value of the signal. When, during an update, you read the value of the signal you always get its updated value (note that this is exactly the opposite of what happens with static automata: inside message handler you can only read the initial state of the automaton). But that's not always what you want: in this case, for instance, whenever {{char}} is active and equal to {{new_line}}, {{buffer}} is set to {{()}}, so {{:string(buffer)}} would just evaluate to the empty string {{""}}. The {{@signal}} notation can also be used to break circular dependencies between signals.
+
+The one above is an example of a discrete derived signal ({{line}}) being activated when another discrete signal ({{char}}) is active and a given condition ({{char == new_line}}) is true. But a discrete signal can also be activated by a change in the value of a continuous signal, as shown in the following examples:
+
+  // {{discrete_signal}} is activated when {{continuous_signal}}
+  // changes and {{cond}} is true, and its value is defined by {{expr}}
+  discrete_signal := expr if cond : continuous_signal;
+
+  // {{discrete_signal}} is activated whenever {{continuous_signal}} changes
+  discrete_signal := expr : continuous_signal;
+
+  // {{discrete_signal}} is activated when the boolean
+  // signal {{continuous_signal}} becomes true
+  discrete_signal := expr when continuous_signal;
+
+Timed rules for discrete signals have a different syntax and come in two slightly different forms. Here's a few examples:
+
+  bool_signal_1 = 30s sans  discrete_signal;
+  bool_signal_2 = 30s since discrete_signal;
+
+  bool_signal_3 = 30s sans  discrete_signal_1, discrete_signal_2;
+  bool_signal_4 = 30s since discrete_signal_1, discrete_signal_2;
+
+  bool_signal_5 = 1s and not 10s since discrete_signal;
+
+{{bool_signal_1}} here is true if and only if {{discrete_signal}} has been dormant for the last 30 seconds, while {{bool_signal_2}} is true if and only if at least 30 seconds have passed since the last time {{discrete_signal}} was active. The difference is subtle: they only differ if at least 30 seconds have passed since the automaton was initialized, and {{discrete_signal}} has never been active: in this case {{bool_signal_1}} is true, while {{bool_signal_2}} is false. In other words, every time {{discrete_signal}} is active both rules start a timer that after 30 seconds changes the value of {{bool_signal_1}} or {{bool_signal_2}} unless {{discrete_signal}} activates again in the meantime, but the first rule also starts it when the automaton is initialized, so {{bool_signal_1}} can be true even if {{discrete_signal}} has never been active. Both forms of the rule can track more than one signal: {{bool_signal_3}} is true if and only if neither {{discrete_signal_1}} nor {{discrete_signal_2}} have been active in the last 30 seconds, and {{bool_signal_4}} is true if and only if at least 30 seconds have passed since the last time either {{discrete_signal_1}} or {{discrete_signal_2}} was active. In both cases you're allowed to use any valid time expression, just like with continuous signals: {{bool_signal_5}} is true if and only if the last time {{discrete_signal}} was active was at least one second ago but no more than 10.
+
+We can now expand a little the mine sump example by implementing some logic to deal with failures of the water level sensors. We'll represent the result of an attempt to read the state of a sensor with a value of type {{Maybe[Bool]}}, since such action may fail for whatever reason: {{nothing}} will represent a failed read, {{just(true)}} one that says the sensor is underwater, and {{just(false)}} one that says it's not. The {{WaterSensor}} automaton will take as input a stream of readings, and output a value of type {{WaterSensorState}} that encodes our knowledge about the state of the sensor:
+
+  // {{initializing}} means that we're still waiting for the first reading,
+  // and that the wait has not been exceedingly long
+  // {{unknown}} means we've not received any information about the state of
+  // the sensor in a while, and that it's time to start worring about it
+  // {{submerged(true/false)}} indicates whether the sensor is submerged,
+  // and that it seems to be working fine
+  type WaterSensorState = initializing, unknown, submerged(Bool);
+
+  reactive WaterSensor raw_reading -> sensor_state {
+    input:
+      raw_reading* : Maybe[Bool];
+
+    output:
+      sensor_state : WaterSensorState;
+
+    state:
+      sensor_state : WaterSensorState = :initializing;
+
+    rules:
+      // {{good_reading}} is a discrete signal defined as the value
+      // carried by {{raw_reading}} when the latter is active and
+      // not equal to {{:nothing}}
+      good_reading := value(raw_reading) if raw_reading != :nothing;
+
+      // {{too_long_without_readings}} is a continuous boolean
+      // signal that is true only if {{good_reading}} has been
+      // dormant for at least 30 seconds
+      too_long_without_readings = 30s sans good_reading;
+
+      // The state variable {{sensor_state}} is set to {{submerged(Bool)}}
+      // whenever a valid reading from the sensor comes in
+      sensor_state = :submerged(good_reading);
+
+      // The state variable {{sensor_state}} is set to {{:unknown}} if
+      // there hasn't been any valid reading in the last 30 seconds
+      sensor_state = :unknown when too_long_without_readings;
+  }
+
+And here's our revised {{MineController}}:
+
+  // The water level is regarded as unsafe if either the
+  // upper sensor is submerged or if it's not working properly
+  // and the information from the lower sensor does not exclude
+  // the possibility that the upper one is underwater
+  Bool is_critical(WaterSensorState lower, WaterSensorState upper) =
+    _,                submerged(true) = true,
+    submerged(true),  unknown         = true,
+    unknown,          unknown         = true,
+    _,                _               = false;
+
+  // We regard the water level as low (that is, safe)
+  // if neither sensor is underwater
+  Bool is_low(WaterSensorState lower, WaterSensorState upper) =
+    lower == :submerged(false) and upper == :submerged(false);
+
+  // An error can be caused either by an inconsistent state of
+  // the sensors, or by the state of either of them being unknown
+  Bool is_anomalous(WaterSensorState lower, WaterSensorState upper) =
+    submerged(false), submerged(true)   = true,
+    unknown,          _                 = true,
+    _,                unknown           = true,
+    _,                _                 = false;
+
+  reactive MineController {
+    input:
+      lower_sensor_reading* : Maybe[Bool];
+      upper_sensor_reading* : Maybe[Bool];
+
+      methane_level : Int;
+      co_level      : Int;
+      airflow_level : Int;
+
+    output:
+      pump_on           : Bool;
+      evacuation_needed : Bool;
+      error_detected    : Bool;
+
+    static:
+      max_methane_level : Nat = 10;
+      max_co_level      : Nat = 20;
+      min_airflow_level : Nat = 100;
+
+    rules:
+      // Water level sensors
+      lower_sensor_state = WaterSensor(lower_sensor_reading);
+      upper_sensor_state = WaterSensor(upper_sensor_reading);
+
+      // Water level controller
+      water_level_critical = is_critical(lower_sensor_state, upper_sensor_state);
+      water_level_low = is_low(lower_sensor_state, upper_sensor_state);
+
+      // Draining switch
+      needs_draining = Switch(water_level_critical, water_level_low);
+
+      // Checking whether methane, carbon monoxide
+      // and airflow levels are critical
+      methane_level_critical = methane_level > max_methane_level;
+      co_level_critical      = co_level > max_co_level;
+      airflow_level_critical = airflow_level < min_airflow_level;
+
+      // The atmosphere is not safe if the readings of the
+      // gas sensors stay critical for more than 30 seconds
+      atmosphere_critical = methane_level_critical or
+                            co_level_critical or
+                            airflow_level_critical;
+      unsafe_atmosphere = atmosphere_critical for 30s;
+
+      // The pump must be on if draining is needed and the
+      // level of methane is below some critical threshold
+      pump_on = needs_draining and not methane_level_critical;
+
+      // Exposing errors in the water level control subsystem
+      error_detected = is_anomalous(lower_sensor_state, upper_sensor_state);
+
+      // Once water reaches the upper sensor and the pump is
+      // switched on, we expect the water level to drop below
+      // the level of the sensor within 5 minutes. If it doesn't
+      // we conclude that the pumping system is not working as expected.
+      pumping_system_not_working = water_level_critical for 300s;
+
+      // The mine must be evacuated if safety requirements are not met
+      evacuation_needed = unsafe_atmosphere or pumping_system_not_working;
+  }
+
+
+Inheritance
+
+Reactive automata can be defined incrementally using inheritance, similarly to classes in OOP. Unlike in OOP though, inheritance between reactive automata is just an implementation feature, invisible to the outside world, and the interfaces of base and derived automata need not be compatible in any way. A derived automaton can define new inputs, outputs and state variables; remove inputs; and redefine the relation between inputs and outputs. Before we start, just be aware of the fact that inheritance and mechanisms for incremental definition and composition of reactive automata in general are at this stage very tentative and experimental: the language is currently just aping the corresponding OOP features, which are in all likehood very suboptimal in this context. With all that in mind, let's see exactly what derived automata can do. We'll start from this very bizzare base automaton:
+
+  reactive Base {
+    input:
+      input_1 : Int;
+      input_2 : Int;
+
+    output:
+      output_1 : Int;
+      output_2 : Int;
+
+    state:
+      state_var_1 : Int = input_1 + input_2;
+
+    static:
+      const_1 : Int = 100;
+
+    rules:
+      state_var_1 = state_var_1 + input_1 + input_2 : input_1, input_2;
+      state_var_1 = state_var_1 + input_1 : input_1, not input_2;
+      state_var_1 = state_var_1 + input_2 : input_2, not input_1;
+
+      output_1 = const_1 + state_var_1;
+      output_2 = input_1 * input_2;
+  }
+
+We can of course add new inputs, outputs, state variables, constants, derived signals and so on:
+
+  reactive Derived1 : Base {
+    input:
+      input_3* : Int;
+
+    output:
+      output_3 : Int;
+
+    state:
+      state_var_2 : Int = 0;
+
+    static:
+      const_2 : Int = -1;
+
+    rules:
+      state_var_2 = state_var_2 + input_3;
+      output_3 = const_2 * state_var_2;
+  }
+
+We can also remove inputs, by turning them into derived signals:
+
+  reactive Derived2 : Base {
+    rules:
+      input_2 = -input_1;
+  }
+
+or we can redefine existing derived signals:
+
+  reactive Derived3 : Base {
+    rules:
+      output_2 = input_1 - input_2;
+  }
+
+or constants:
+
+  reactive Derived4 : Base {
+    static:
+      const_1 : Int = 1000;
+  }
+
+We can change the rules that update state variables, or their initialization expression:
+
+  reactive Derived5 : Base {
+    state:
+      state_var_1 : Int = input_1;
+
+    rules:
+      state_var_1 = state_var_1 + input_1 : input_1;
+  }
+
+Note that the new update rule for {{state_var_1}} replaces all three update rules defined in {{Base}}. You can also choose to override only the update rules for a given variable, or only its initialization expression.
+
+
+Methods
+
+Methods of reactive automata are similar to methods of static ones. They are just functions that happen to have implicit access to the internal state of an automaton. Their syntax is a bit different though:
+
+  Bool Lines.buffer_is_empty = buffer == ();
+
+  Bool Lines.buffer_contains(Nat char) = in(char, buffer);
+
+Methods are invoked with the usual syntax {{automaton.method(..)}} on a local automaton (inside a procedure) or a nested one and like normal functions from other methods of the same automaton. They cannot be invoked from within the body of the automaton they belong to though and they are not inherited by derived automata.
