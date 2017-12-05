@@ -268,7 +268,7 @@ Let's say we need to define a data structure for binary trees of integer numbers
 To make this declaration more general, so that it could be used with values of any type, not just integers, we will need to add a parameter to it:
 
   type BinTree[T]  = empty_bin_tree,
-                     bin_tree(Int, BinTree[T], BinTree[T]);
+                     bin_tree(T, BinTree[T], BinTree[T]);
 
 Here {{T}} is a type variable, and {{BinTree[T]}} a parametric type. A type variables is represented by a standalone uppercase letter. To instantiate a parametric type, just replace the type variable between brackets with a normal type:
 
