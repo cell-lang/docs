@@ -149,7 +149,7 @@ A future version of the compiler will provide a more compact notation for the fi
 
   a_map_or_bin_rel(key) // Same as a_map_or_bin_rel(key, !!)
 
-and this notation is already available for mutable relation variables defined inside static automata (we'll discuss them in the following chapters).
+and this notation is already available for mutable relation variables defined inside relational automata (we'll discuss them in the following chapters).
 
 Records support all binary relation and map operations, plus access by field and field membership test:
 

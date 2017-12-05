@@ -5,9 +5,9 @@ We're now going to see how automata are created and used. While we will focus he
 Automata of either type can only be created inside procedures and not functions. A procedure can declare any number of automaton variables, but it cannot create automata dinamically: all automaton variables are instantiated when a procedure is called, and automatically destroyed when it returns. Automaton instances are also only visible inside the procedure they're declared in and they cannot be passed to other procedures.
 
 
-Static automata
+Relational automata
 
-In order to see how to manipulate static automata, we'll write a tiny command line tool that is actually useful in practice. Our application will create a static automaton, read an initial state for it from a file and a list of messages from another, send each message to the automaton instance in the given order, and save its final state in another file. We'll make use of the {{Counter}} automaton we saw in the previous chapters, but the code can be made to work with any automaton type with only trivial changes.
+In order to see how to manipulate relational automata, we'll write a tiny command line tool that is actually useful in practice. Our application will create a relational automaton, read an initial state for it from a file and a list of messages from another, send each message to the automaton instance in the given order, and save its final state in another file. We'll make use of the {{Counter}} automaton we saw in the previous chapters, but the code can be made to work with any automaton type with only trivial changes.
 
   Int Main(String* args) {
     instance : Counter;
@@ -93,7 +93,7 @@ The state of any automaton can be set at any time, any number of times. It's jus
 
 Here too the variable {{ok}} indicates whether the message was processed successfully. Also note the {{msg_list :: CounterMsg*}} check, which is required to verify that whatever data was loaded from the input file was indeed a valid sequence of messages for {{Counter}}.
 
-The last instruction we have to manipulate static automata is used to take a snapshot of the state of an automaton instance:
+The last instruction we have to manipulate relational automata is used to take a snapshot of the state of an automaton instance:
 
   final_state = read instance;
 
@@ -165,7 +165,7 @@ Once the automaton instance has been initialized, you'll be able to check the st
 
 Once the automaton is initialized its life becomes a cycle where you update its inputs when needed, propagate those updates throughout the automaton and then check how the outputs have changed and react accordingly. Keep in mind that just setting the values of the inputs does not trigger the update propagation process, which has to be done explicitly using the {{apply}} statement.
 
-Taking a snapshot of and restoring the state of a reactive automaton is the same as doing it with a static one, using the {{read}} and {{write}} statements respectively. The first command saves the values of all continuous inputs and state variables, but not the timers. If the automaton that does not contain any timed rules its state can be reconstructed exactly later; otherwise timed rules will behave as if all signals have no previous history.
+Taking a snapshot of and restoring the state of a reactive automaton is the same as doing it with a relational one, using the {{read}} and {{write}} statements respectively. The first command saves the values of all continuous inputs and state variables, but not the timers. If the automaton that does not contain any timed rules its state can be reconstructed exactly later; otherwise timed rules will behave as if all signals have no previous history.
 
 Let's now see an example of how to deal with discrete signals using another automaton we've already seen before, {{Lines}}, which splits a string of characters into lines. We'll use it to split a test strings, and we'll print the results:
 
@@ -248,3 +248,7 @@ The {{elapsed}} command is used to provide the time information. Reactive automa
 The other difference with automata that are not time-aware is that the {{apply}} command has to be called repeatedly until it returns true. In order to understand why, consider what would happen when applying the test inputs defined by {{water_sensor_test_data}}. The automaton receives the first sensor reading after 40 seconds of simulated time, but the rule that sets {{sensor_state}} to {{unknown}} is supposed to be triggered 10 seconds before that. So the first thing the automaton has to do when the {{apply}} command is executed is to catch up on all the backlog. It sets the internal clock forward by 30 seconds, the time when the first (and only, in this case) timer expires, and sets {{sensor_state}} to {{unknown}}. At that point, that is, after 30 seconds of simulated time, before even processing the new input the {{apply}} command finishes and returns {{false}}. It does so in order to give its client a chance to react to the first time-triggered update. After that the client is expected to call the {{apply}} command as many times as needed, until all expired timers have been processed. Once all timers have been taken care of the automaton processes the new inputs, which finally completes the update, and returns true.
 
 In a real application of course you're supposed to periodically update a time-aware automaton, even when no inputs have changed, in order to allow the timed rule to update its state in real time. But the behaviour of the automaton is always deterministic: whenever you give it a chance to update its state, it always completes all pending updates before processing the new inputs.
+
+
+
+Version 0.1 of functional/relational/reactive programming language Cell released

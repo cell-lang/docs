@@ -188,7 +188,7 @@ if {{cond}} is a more complex expression. All types of state variable updates ne
 
 Error handling
 
-Unlike static ones, reactive automata have no support for transactions, and once you work through a few examples, it's easy to see why. Instead, if the evaluation of an expression fails during the execution of a rule, the target signal simply enters a special "undefined" state, which is then propagated to all the signals that depend on it, either directly of indirectly. If for example in the following code the evaluation of {{f(s0)}} failed, not only {{s1}} but also {{s2}}, {{c}} and {{v}} would become undefined:
+Unlike relational ones, reactive automata have no support for transactions, and once you work through a few examples, it's easy to see why. Instead, if the evaluation of an expression fails during the execution of a rule, the target signal simply enters a special "undefined" state, which is then propagated to all the signals that depend on it, either directly of indirectly. If for example in the following code the evaluation of {{f(s0)}} failed, not only {{s1}} but also {{s2}}, {{c}} and {{v}} would become undefined:
 
   s1 = f(s0);
   s2 = g(s1);
@@ -341,7 +341,7 @@ The second rule in {{Lines}} shows how to define a derived discrete signal. It's
 
   line := :string(@buffer) if char == new_line;
 
-Note the use of {{@buffer}} instead of just {{buffer}}. The {{@signal}} notation is used to access the pre-update value of the signal. When, during an update, you read the value of the signal you always get its updated value (note that this is exactly the opposite of what happens with static automata: inside message handler you can only read the initial state of the automaton). But that's not always what you want: in this case, for instance, whenever {{char}} is active and equal to {{new_line}}, {{buffer}} is set to {{()}}, so {{:string(buffer)}} would just evaluate to the empty string {{""}}. The {{@signal}} notation can also be used to break circular dependencies between signals.
+Note the use of {{@buffer}} instead of just {{buffer}}. The {{@signal}} notation is used to access the pre-update value of the signal. When, during an update, you read the value of the signal you always get its updated value (note that this is exactly the opposite of what happens with relational automata: inside message handler you can only read the initial state of the automaton). But that's not always what you want: in this case, for instance, whenever {{char}} is active and equal to {{new_line}}, {{buffer}} is set to {{()}}, so {{:string(buffer)}} would just evaluate to the empty string {{""}}. The {{@signal}} notation can also be used to break circular dependencies between signals.
 
 The one above is an example of a discrete derived signal ({{line}}) being activated when another discrete signal ({{char}}) is active and a given condition ({{char == new_line}}) is true. But a discrete signal can also be activated by a change in the value of a continuous signal, as shown in the following examples:
 
@@ -579,7 +579,7 @@ Note that the new update rule for {{state_var_1}} replaces all three update rule
 
 Methods
 
-Methods of reactive automata are similar to methods of static ones. They are just functions that happen to have implicit access to the internal state of an automaton. Their syntax is a bit different though:
+Methods of reactive automata are similar to methods of relational ones. They are just functions that happen to have implicit access to the internal state of an automaton. Their syntax is a bit different though:
 
   Bool Lines.buffer_is_empty = buffer == ();
 

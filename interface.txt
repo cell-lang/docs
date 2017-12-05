@@ -43,13 +43,13 @@ The last two methods, {{string printed()}} and {{void print(std::ostream &os)}},
 When the methods of automaton-derived generated classes need to return a {{cell::Value}} object they always do it using a {{std::unique_ptr<cell::Value>}} smart pointer. Once the smart pointer goes out of scope, the {{cell::Value}} object it points to is automatically deleted. If you get a pointer to one of its subobjects, using methods of the {{cell::Value}} interface like for instance {{Value *item(unsigned int)}}, do not try to delete it. Those subobjects are "owned" by the object they belong to, and are automatically deleted along with it. It goes without saying that those pointers cannot be used anymore once the root object is deleted.
 
 
-Static automata
+Relational automata
 
-Let's take a look at the interface of the classes produced by the compilation of a static automaton. We'll start with a very simple one, {{Counter}}:
+Let's take a look at the interface of the classes produced by the compilation of a relational automaton. We'll start with a very simple one, {{Counter}}:
 
 {#{cpp/counter.html}#}
 
-As you can see, the generated C++ class has the same name of the Cell automaton it derives from, and is placed in the {{generated}} namespace. The first three methods, {{read_state()}}, {{set_state(..)}} and {{execute(..)}}, are the same for all static automata. All other methods are just accessors that are specific to a particular automaton, and can be used to read pieces of its state, or to invoke its methods.
+As you can see, the generated C++ class has the same name of the Cell automaton it derives from, and is placed in the {{generated}} namespace. The first three methods, {{read_state()}}, {{set_state(..)}} and {{execute(..)}}, are the same for all relational automata. All other methods are just accessors that are specific to a particular automaton, and can be used to read pieces of its state, or to invoke its methods.
 
 The {{read_state()}} methods is the equivalent of the {{read}} instruction in Cell: it takes a snapshot of the state of the automaton and returns it as a {{cell::Value}} object. As explained earlier, once the {{unique_ptr}} object goes out of scope the returned object and all its subobjects are automatically deleted. Saving the state of an automaton to a file in text form can be done with the instruction {{instance.read_state().print(ofs);}}, where {{ofs}} is a valid instance of {{std::ofstream}}.
 
@@ -101,7 +101,7 @@ As an alternative to {{set_input(..)}} and {{read_output(..)}}, which can operat
 
 {#{cpp/switch-client-B.html}#}
 
-The {{read_state()}} and {{set_state(..)}} methods work in the same way as with static automata, but with the limitations we've already discussed for time-aware automata. The last two methods, {{changed_outputs_count()}} and {{changed_output_id(..)}} provide you with a list of outputs that have changed (or have been active, in the case of discrete outputs) as a result of the last call to {{apply()}}:
+The {{read_state()}} and {{set_state(..)}} methods work in the same way as with relational automata, but with the limitations we've already discussed for time-aware automata. The last two methods, {{changed_outputs_count()}} and {{changed_output_id(..)}} provide you with a list of outputs that have changed (or have been active, in the case of discrete outputs) as a result of the last call to {{apply()}}:
 
   // Changing inputs here
   ...
