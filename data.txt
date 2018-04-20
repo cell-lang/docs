@@ -47,14 +47,14 @@ Sequences are more or less the equivalent of arrays or list in other languages. 
   (:a, :b, 3.14159, 100)
   (:a, (1, 2, 3, (0.2)), (), (:b, :c))
 
-As an aside, since parenthesis are used to create sequences, when you need to specify the order of evaluation in a complex expression, you have to use braces:
+As an aside, when parentheses are used to specify the order of evaluation in a complex expression, in order to avoid ambiguities with one-element sequences, you have to write a {{#}} symbol before the opening parenthesis:
 
-  w = x * {y + z};
+  w = x * #(y + z);
 
-The only exception to this rule is boolean expressions, which cannot contain sequences so in that particular case you are free to use either parentheses or braces, as you prefer. The following two expressions are both valid, and completely equivalent:
+The only exception to this rule is boolean expressions, which cannot contain sequences so in that particular case you are free to omit the initial {{#}} symbol. The following two expressions are both valid, and completely equivalent:
 
     e = (a and b) or (c and d);
-    e = {a and b} or {c and d};
+    e = #(a and b) or #(c and d);
 
 Like all collection types, sequences can hold any kind of values, and can therefore also be used as tuples, that is, fixed-length sequences of heterogeneous values.
 
