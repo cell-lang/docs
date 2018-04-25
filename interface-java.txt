@@ -1,0 +1,130 @@
+Interfacing with Java
+
+When you compile a Cell program, the compiler does not generate a binary executable. Instead, it generates a number of text files containing code in the chosen output language. We'll examine the Java code generator here. If you define a {{Main(..)}} procedure in you Cell code, the generated code can then be handed over to a Java compiler to generate a jar file (or just a set of class files). That's how for instance the Cell compiler itself is built, and also the simplest way to build a program that tests your automata. But if you don't define a {{Main(..)}} procedure, the compiler will just generate a set of classes, one for each type of automaton in your Cell code, that can be used to instantiate and manipulate the corresponding automata from your Java code. The compiler will also generate a text file named {{interfaces.txt}} which documents the interfaces of the generated classes in pseudo-Java code. In this chapter we'll go through the interface of the generated classes and explain how to use them, and what each of their methods is for.
+
+It's often a good idea not to use the classes that are generated for each Cell automaton directly, but to derive your own classes from them, and add new methods (and/or member or class variables, if needed) there. Among other things, if a method of the generated classes requires some sort of manual data conversion, you really don't want to repeatedly perform those conversions all over your codebase: it's much better to have all of them in just one place. The best thing to do is probably to define an overloaded version of the same method, or a similar one, in the derived class, and have it take care of all data conversions before and/or after invoking the generated one.
+
+
+Data conversion
+
+The biggest issue one encounters when interfacing two languages as different as Cell and Java is converting data back and forth between the two native representations. Fortunately, the compiler does most of the heavy lifting for you. For starters, there's a number of simple Cell data types that are mapped directly to a corresponding Java type. They are shown in the following table:
+
+{#{java/data-conversion.html}#}
+
+The above table should be mostly self-explanatory, except for the last entry: tagged types can be mapped directly to a Java type only if the tag is a known symbol and the type of the untagged value in turn has a direct mapping to a Java type. In this case, the tag is simply ignored and the mapping of the  untagged value is used. A type like {{<person_id(Nat)>}}, for example, will be mapped to a {{long}} in Java, and the generated code will take care of adding or removing the {{person_id}} tag as needed.
+
+For data types that are not in the above table, the compiler tries to generate a Java class for them. It does so for symbols, tuples, records and union types. All the generated types are documented in the {{interface.txt}} file. As an example, given the following Cell code:
+
+  type Point = point(Int, Int);
+
+  type Shape = square(left: Int, bottom: Int, side: Nat),
+               rectangle(left: Int, bottom: Int, width: Nat, height: Nat),
+               circle(center: Point, radius: Float);
+
+  type List[T] = empty_list, list(T, List[T]);
+
+  schema DrawingBoard {
+    ref_point(Point):
+      shapes : List[Shape];
+  }
+
+this is what the compiler will generate, in the pseudo-Java code used in {{interfaces.txt}}:
+
+{#{java/interface-type-example.html}#}
+
+The first Cell type, {{Point}}, is mapped to a Java class by the same name. The member variables {{item1}} and {{item2}} correspond to the first and second field of the tuple respectively. For a union type like {{Shape}} an empty interface is created, and each of the alternatives in the union is mapped to its own type, which implements the interface. The mapping for records and tagged records like {{Square}} or {{Circle}} is obvious. Symbols like {{empty_list}} are mapped to their own singleton class, {{EmptyList}} in this case. Such classes have a private constructor, and their only instance can be accessed through the {{singleton}} class variable. Generic types like {{List[T]}} are never mapped directly to Java types, only their instances are. In this specific case {{List[Shape]}} is mapped to {{List_Shape}}. All generated classes and their member or class variables are public, and they're part of the {{net.cell_lang}} package. They also overload the {{toString()}} method so that it returns the standard textual representation for the corresponding Cell value. {{Point.toString()}}, for example, will returns strings like {{"point(12, -5)"}}.
+
+The exact rules that are used to map a Cell type to a corresponding Java type are rather complex, and not yet final, so they won't be described here, but the final result is generally just what you would expect. There's only a couple things that need explaining. If you use "inline" tuple or record types the compiler will get a bit creative with their names. For example, for an inline tuple type like {{(Int, Point, String)}} the compiler will generate a Java class named {{Long_Point_String}}, and an inline record type like {{(x: Float, y: Float, z: Float)}} will be mapped to a Java class named {{X_Y_Z}}. Union types can be mapped to a generated native type only if they only contain symbols or tagged values. The compiler for example will not be able to generated a Java equivalent for the following type:
+
+  type Point = (x: Int, y: Int), point(x: Int, y: Int);
+
+Finally, when any type of naming conflict arises, the compiler fixes it by adding underscores and/or a unique number at the end of the type name, so don't be surprised if you find generated types with names like {{MyType_}} or {{MyType_2}}.
+
+Every generated type is declared in its own file, and of course there's nothing stopping you from replacing the generated classes with your own, as long as they have the same names, are part of the same {{net.cell_lang}} package, and you don't remove or change the type of its member variables. You can of course add all the member variables and methods you need, which will be ignored by the generated code. Just be careful because the Cell compiler will regenerate those classes every time, and will overwrite your own if they are in the wrong directory. The simplest thing to do is probably to delete the generated classes you want to replace right after running the Cell compiler, as part of the build process, and keep their replacements somewhere else in the {{CLASSPATH}}.
+
+When everything else fails, the exchange format depends on the direction data is moving in. When passing data from Java to Cell you're expected to pass a string that contains the textual representation of a Cell value. That's neither elegant nor particularly efficient, but at least it's simple and straightforward. When data moves in the other direction, from Cell to Java, it is returned as an object of type {{net.cell_lang.Value}}. Its declaration is shown here:
+
+{#{java/value.html}#}
+
+This interface is implemented by a number of concrete classes each of which is used to represent a particular type of Cell value: symbols, integers, floating point numbers, sequences, sets, binary and ternary relations and tagged values. These concrete classes are hidden from the user, and they can be manipulated only through their common "fat" interface, whose methods can be divided into three groups. The first one comprises all the {{boolean is*()}} methods, which are used to discover the type of the value represented by the target object. Then there's a group of methods that are used to actually access the data held by those objects:
+
+{#{java/value-methods.html}#}
+
+Each of these methods is actually implemented only in some of the classes that can hide behind the {{Value}} interface, and if used with the wrong concrete class they will throw an exception. {{long asLong()}}, for example, can only be used if the target object actually holds an integer value, which can be checked using the {{boolean isInt()}} query method.
+
+The last method, {{void print(Writer)}}, is used to generate the textual representation of the value, which is written to the provided {{java.io.Writer}} object.
+
+
+Relational automata
+
+Let's take a look at the interface of the classes produced by the compilation of a relational automaton. We'll use a number of automata we've seen in the previous chapters, and we will start with a very simple one, {{Counter}}:
+
+{#{java/counter.html}#}
+
+As you can see, the generated Java class has the same name of the Cell automaton it derives from, and it belongs to the {{net.cell_lang}} package. The first three methods, {{readState()}}, {{setState(..)}} and {{execute(..)}}, are the same for all relational automata. All other methods are just accessors that are specific to a particular automaton, and can be used to read pieces of its state, or to invoke its methods.
+
+The {{readState()}} method is the equivalent of the {{read}} instruction in Cell: it takes a snapshot of the state of the automaton and returns it as a {{net.cell_lang.Value}} object. Saving the state of an automaton to a file in text form can be done with the instruction {{counter.readState().print(writer);}}, where {{writer}} is a valid instance of {{java.io.Writer}}.
+
+{{setState(..)}} is used to set the state of an automaton instance, and is the equivalent of the {{write}} instruction in Cell. It can be used at any time in the life of the automaton instance, any number of times. The new state has to be provided in text form. Here's an example:
+
+{#{java/set-state.html}#}
+
+If the provided state is not a valid one, {{setState(..)}} will throw an exception. In that case, the automaton instance will just retain the state it had before, and will still be perfectly functional.
+
+{{execute(..)}} is used to send the automaton a message, which has to be passed in text form. A few examples:
+
+  counter.execute("incr");
+  counter.execute("decr");
+  counter.execute("reset");
+  counter.execute("reset(-1)");
+
+Errors handling works in the same way as with {{setState()}}. If an error occurs an exception will be thrown, but the automaton will remain fully operational, and its state will be left untouched.
+
+The two methods {{value()}} and {{updates()}} are {{Counter}}-specific accessors that return the values of the {{value}} and {{updates}} member variables respectively. Note that the types of such variables is just {{Int}}, which can be mapped directly to {{long}} in Java, with no need to use {{net.cell_lang.Value}}.
+
+Let's now take a look at a more complex automaton, {{Supply}}. Here's the declaration of the generated Java class:
+
+{#{java/supply.html}#}
+
+The first three methods of the {{Supply}} class, {{readState()}}, {{setState(..)}} and {{execute(..)}}, are the same as before. The two methods {{nextPartId()}} and {{nextSupplierId()}} are just accessors for the corresponding member variables, just like {{value()}} and {{updates()}} in {{Counter}}. All the other methods are new, and are either accessors for some mutable relation variable or wrappers for a Cell method. A first set of boolean methods check whether a relation contains a given tuple (or value, for unary relations):
+
+{#{java/supply-methods-A.html}#}
+
+A second group of methods, like {{supplier()}} or {{unitPrice()}}, return the entire content of a given relations. In the case of unary relation they return an array of values corresponding to the elements of the relations. In the case of binary or ternary relations they return an object of type {{net.cell_lang.Pair}} and {{net.cell_lang.Triplet}} respectively, that contain the columns of the relations. The {{Pair}} and {{Triplet}} types are defined as follow:
+
+{#{java/pair-triplet.html}#}
+
+It would be of course nicer to return an array of tuples, rather than a pair/triplet of arrays, and that's how it is in other languages, but given the restrictions of Java's type system this is probably the simplest and most efficient way to do it.
+
+Binary relations with a key on the first column (that is, maps) also have accessors that return the value corresponding to a given key, provided that the relation/map contains such key:
+
+{#{java/supply-methods-B.html}#}
+
+The last group of methods ({{lowestPriceSuppliers(..)}}) are just the compiled Java version of the corresponding Cell methods of the {{Supply}} automaton.
+
+
+Reactive automata
+
+We'll use {{Switch}} as our first example. This is the interface of the corresponding generated class:
+
+{#{java/switch.html}#}
+
+The first thing to note here is the two enumerations {{Input}} and {{Output}}, whose elements are the uppercase version of the names of the inputs and outputs of {{Switch}}. These are used in conjunction with the methods {{setInput()}} and {{readOutput()}} as shown here:
+
+{#{java/switch-client-A.html}#}
+
+As an alternative to {{setInput(..)}} and {{readOutput(..)}}, which can operate on any input or output and use the textual representation of a value or {{net.cell_lang.Value}} respectively as an exchange format, the generated class also provides another set of methods each of which can manipulate a single input or output, but that are more convenient to use in most cases. The above code snippet can be rewritten as follow:
+
+{#{java/switch-client-B.html}#}
+
+The {{readState()}} and {{setState(..)}} methods work in the same way as with relational automata, but with the limitations we've already discussed for time-aware automata. The method {{changedOutputs()}} returns a list of outputs that have changed (or have been activated, in the case of discrete outputs) as a result of the last call to {{apply()}}:
+
+{#{java/switch-client-C.html}#}
+
+The last thing we need to see is how to deal with time-aware automata. We'll use {{WaterSensor}}:
+
+{#{java/water-sensor.html}#}
+
+The only differences here, apart from the input setters and output getters which are obviously specific to each automaton type and the generated types for {{Maybe[Bool]}} and {{WaterSensorState}}, are the two extra methods {{setElapsedSecs(..)}} and {{setElapsedMillisecs(..)}} and the fact that {{apply()}} now returns a boolean value. The former are the equivalent of the {{elapsed}} instruction in Cell, and the value now returned by {{apply()}} has the same meaning as the one returned by the {{apply}} instruction in a Cell procedure. Here's an example of how to update an instance of {{WaterSensor}}:
+
+{#{java/water-sensor-client.html}#}
