@@ -1,0 +1,30 @@
+Current status
+
+Remember, this is version 0.1. I'm not aware, at the time of writing, of any major bug, but the compiler just hasn't been tested enough. Use it at your own risk!
+
+More in detail, the functional subset of the language is the only part that has been been used to write a non-trivial application (the Cell compiler itself), and it has been working reliably for me for at least a couple years now, but I've no doubt that once other people, with different programming styles, start to use it they will find bugs I never came across.
+
+Relational automata have so far been used only to write small toy applications, and still need to be tested extensively.
+
+Reactive automata are at this stage very experimental. Not only they too haven't been tested anywhere enough but unlike their relational counterparts their design is still tentative and in a state of flux, and their implementation much more complex.
+
+Performance also leaves a lot to be desired at the moment. Even though Cell is a compiled language, in terms of speed right now it's closer to, say, Python that is it to Java. But I see no reason why it shouldn't be able to at least approach the speed of fast languages, once type-based optimization is implemented.
+
+The documentation on this website is another work in progress. It covers almost all the features of the language, but rational, design guidelines and examples are still missing at this stage.
+
+So, again, this is a beta version, don't use it for anything important quite yet.
+
+
+Road map
+
+The next version of Cell, 0.2, will focus on performance optimization, and in particular on making use of types to improve both execution speed and memory footprint of the generated code.
+
+Version 0.3 will be about implementing the basic features of relational automata that are still missing. Most of these features are described either in the introductory {#{example-link}#} or in the {#{relational-link}#} page: things like foreign keys, better support for hierarchical classification and polymorphic entities, less verbose delete statements, support for symmetric relations, maybe (just maybe) aggregate query operators, and so on.
+
+Version 0.4 will be the first version of the language meant for actual use. It won't introduce any new major language feature, but it will focus on things like testing, providing a minimal standard library with documentation, and improving the interface with the host language. It will also provide a code generator for C and maybe (again, emphasis on "maybe") other languages.
+
+After that, for relational automata, the most important new features will be Datalog-like inference rules with memoization, and more powerful update models. The current update model has clear limitations, but it has a couple of important properties: state transitions are atomic (that is, only the states before and after the transition can be observed, and all intermediate ones are just an implementation detail that is hidden from the developer) and it is amenable to a parallel implementation. The new models will preserve these properties, while adding more flexibility and modularity.
+
+As for reactive automata, the list of planned new features is simply too long, too weird and too tentative to be discussed extensively here. Suffice it to say that reactive automata in their current form are just a preview, and that there's a lot more to come.
+
+Longer term plans are still hazy at this point, but they include an implementation that can deal efficiently with large persistent data sets, and declarative ways to build distributed applications, among other things.

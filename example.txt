@@ -205,7 +205,7 @@ but code that mutates the state of an automaton is quite different. The only way
 The first message and message handler pair that Miki defines for his {{SocialNetwork}} automaton add a new person's data to the dataset:
 
   type AddPerson = add_person(
-    id:              PersonId,
+    id:              Person,
     name:            String,
     surname:         String,
     nickname:        String,

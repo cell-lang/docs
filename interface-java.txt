@@ -11,7 +11,7 @@ The biggest issue one encounters when interfacing two languages as different as 
 
 {#{java/data-conversion.html}#}
 
-The above table should be mostly self-explanatory, except for the last entry: tagged types can be mapped directly to a Java type only if the tag is a known symbol and the type of the untagged value in turn has a direct mapping to a Java type. In this case, the tag is simply ignored and the mapping of the  untagged value is used. A type like {{<person_id(Nat)>}}, for example, will be mapped to a {{long}} in Java, and the generated code will take care of adding or removing the {{person_id}} tag as needed.
+The above table should be mostly self-explanatory, except for the last entry: tagged types can be mapped directly to a Java type only if the tag is a known symbol and the type of the untagged value in turn has a direct mapping to a Java type. In this case, the tag is simply ignored and the mapping of the  untagged value is used. A type like {{<person_id(Int)>}}, for example, will be mapped to a {{long}} in Java, and the generated code will take care of adding or removing the {{person_id}} tag as needed.
 
 For data types that are not in the above table, the compiler tries to generate a Java class for them. It does so for symbols, tuples, records and union types. All the generated types are documented in the {{interface.txt}} file. As an example, given the following Cell code:
 
