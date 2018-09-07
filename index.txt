@@ -23,5 +23,6 @@ The Cell compiler is open source software, and all source code is available on {
 
 News
 
+06 Sep 2018: Version 0.2 of {#{release-notes-03-link}#} released.
 25 Apr 2018: Version 0.1 of {#{release-notes-02-link}#} released.
 26 Feb 2018: Version 0.1 of {#{release-notes-01-link}#} released.

@@ -2,153 +2,146 @@ A comparison with OOP
 
 Note: if you haven't already, read the introductory {#{example-link}#} before reading this.
 
-After writing the core of his application in Cell, Miki has now decided to write it again in C#, in order to get a better sense of the differences between the two programming paradigms, OOP and the functional/relational approach used in Cell. Miki is not trying here to replicate more "advanced" features of Cell, like orthogonal persistence, transactions, or the ability to record and replay the execution of the application. He just wants to write some of the logic in both paradigms to see how they compare in terms of the usual metrics that we value as software engineers, things like simplicity, reliability, maintainability, overall development effort and so on.
+We're now going to re-implement the Cell code we saw in the previous chapter in Java, in order to get a better sense of the differences between the two programming paradigms, OOP and the functional/relational approach used in Cell. Were're not trying here to replicate more "advanced" features of Cell, like orthogonal persistence, transactions, or the ability to record and replay the execution of the application. We just want to show how they compare in terms of the usual metrics that we value as software engineers, things like simplicity, reliability, maintainability, overall development effort and so on.
 
-On the Cell side, Miki has decided to make use of a number of previously discussed features that are not implemented in the current (0.1.1) version of the compiler, but which will be available starting with version 0.3.
-
-On the C# side, in order to avoid boring boilerplate code that would make the comparison less clear, Miki has decided to only partially follow one of the fundamental tenets of OOP, encapsulation. All member variables will be public, but they are intended to be read-only outside the class they belong to. Any change to the state of any object will only be carried out by methods of its class. This is similar to what happens in Cell with relational automata, whose state is visible in read-only mode to the outside world, but can be mutated only by the message handlers of the same automaton, although there are several major differences here, one of them being the fact that in Cell that's actually enforced by the language, while in C# it is left to the programmer's self-discipline.
-
-The other rule that Miki has set for himself is that no linear searches are allowed in his code. His application is of course managing only a small amount of data, and he could probably get away with linear searches, but he has decided to write it as if it were a real, industrial-scale one. In the Cell version of the software of course all searches and lookups are performed in constant time, courtesy of the relational model.
+On the Java side, in order to avoid boring boilerplate code that would make the comparison less clear, we'll be only partially following one of the fundamental tenets of OOP, encapsulation. All member variables will be public, but they are intended to be read-only outside the class they belong to. Any change to the state of any object will only be carried out by methods of its class. This is similar to what happens in Cell with relational automata, whose state is visible in read-only mode to the outside world, but can be mutated only by the message handlers of the same automaton, although there are several major differences here, one of them being the fact that in Cell that's actually enforced by the language, while in Java it is left to the programmer's self-discipline.
 
 
 Data structures
 
 We've already seen the Cell schema for the core logic of Miki's application:
 
-  type Person = person(Int);
-  type Gang   = gang(Int);
+  type UserId  = user_id(Int);
+  type GroupId = group_id(Int);
 
-  schema SocialNetwork {
+  schema OnlineForum {
     next_id : Int = 0;
 
-    person(Person):
-      name           : String,
-      surname        : String,
-      nickname       : String [unique],
+    user(UserId):
+      username       : String [unique],
+      signup_date    : Date,
+      first_name     : String,
+      last_name      : String,
       date_of_birth? : Date;
 
-    know_each_other(Person | Person):
-      met_on          : Date,
-      introduced_by?  : Person;
+    chat_group(GroupId):
+      name  : String,
+      admin : UserId;
 
-    gang(Gang):
-      name    : String,
-      leader  : Person;
-
-    member(Person, Gang):
+    member(UserId, GroupId):
       joined_on : Date,
-      rank      : Int;
+      karma     : Int;
+
+    friends(UserId | UserId):
+      since : Date;
+
+    admin(_, id) => user(id);
+    member(u, g) => user(u), chat_group(g);
+    friends(u1, u2) => user(u1), user(u2);
   }
 
-There are a couple minor differences here, due to the fact that we are using the yet unreleased version 0.3 of the language. There's syntactic sugar for the unique {{nickname}} attribute, and the {{know_each_other}} relation and its attribute relations, {{met_on}} and {{introduced_by}}, have been declared as symmetric.
+There are of course many ways to design a set of equivalent data structures in Java (unlike what happens with Cell, where there's just one obvious design), each of them with its own trade-offs, but this seems a reasonable starting point:
 
-There are of course many ways to design a set of equivalent data structures in C# (unlike what happens with Cell, where's there's just one obvious way to design the data schema), but this is what Miki has settled on:
+{#{java/online-forum-schema.html}#}
 
-{#{csharp/social-network-schema-0.html}#}
+There are a couple obvious issues with the Java version of the schema. The first one is that there's some redundancy in the data. The most obvious part of it is the {{memberships}} member variables in {{User}} and {{Group}}: either one could be eliminated without actually removing any information from the data set. The redundancy is needed because we have to be able to efficiently retrieve both the list of groups a given user has joined (and also join date and karma for each of them) and the list of all members of a given group. The same goes for {{friendships}}, because the fact that Alice and Bob are friends has to be recorded in both the corresponding objects.
 
-There are a couple issues that Miki has noticed with the C# version of the schema. The first one is that there's some redundancy in the data. The most obvious part of it is the {{memberships}} member variables in {{Person}} and {{Gang}}: either one could be eliminated without actually removing any information from the data set. The redundancy is needed because we have to be able to efficiently retrieve both the list of gangs a given person has joined (along with the membership data, like join date and rank) and the list of all members of a given gang. But there's another, more subtle, source of redundancy: all the {{Dictionary<>}} member variables contain a list of key/value pairs where the value is an object of one of the classes in Miki's model, and the key is either the id of the object itself or that of another object linked from it. That is, the id of the entity that is used as key is stored twice, first in the object itself and second as the key of the dictionary.
+Redundancy causes two main problems: the first one is that if some piece of information is stored in multiple places, every time it changes one has to update each of the locations that contain it, and that means writing more code. The other problem has to do with consistency: a bug in the code could cause redundant data structures to go out of sync, and that would almost surely cause the software to misbehave. One could end up for example in a situation where a {{User}} "thinks" it has joined a {{Group}}, but the corresponding {{Group}} object doesn't have such user among its members. The redundancy also makes data structures less clear and more difficult to understand.
 
-There's two main problems that Miki sees with that. The first one is that if some piece of information is stored in multiple places, every time he updates it Miki has to update each of the locations that contain it, and that means writing more code. The other problem has to do with consistency: a bug in the code could cause redundant data structures to go out of sync, and that would almost surely cause the software to misbehave. One could end up for example in a situation where a {{Person}} "thinks" it has joined a {{Gang}}, but the corresponding {{Gang}} object doesn't have such person among its members. Miki also feels that the redundancy makes his data structures less clear and more difficult to understand.
+The other major problem is the fact that in OOP there's no way to enforce a number of useful integrity constraints on the data. Nothing would prevent buggy code from, for example, creating two different {{Membership}} objects for the same combination of user and chat group, with the result that a user could end up having two different join dates and karmas in the same group. Similar problems could occur with {{Friendship}} objects. And of course there's no way to declaratively enforce the fact that usernames have to be unique.
 
-The second issue that bothers Miki is the fact that in C# (and more generally, in OOP) there's no way to enforce a number of useful integrity constraints on the data. Nothing would prevent buggy code from, for example, creating two different {{Membership}} objects for the same combination of person and gang, with the result that a person could end up having two different join dates and ranks in the same gang. Similar problems could occur with {{Friendship}} objects. And of course there's no way to declaratively enforce the fact that nicknames have to be unique.
-
-All these problems are easily avoided using the relational model. In OOP the only way to make sure that that doesn't happen is to write bug-free code. But code is complex and difficult to write, and will invariably contain bugs in any non-trivial application, while redundance-free data structures and declarative integrity constraints are very easy to design and get right.
+All these problems are easily avoided using the relational model. In OOP the only way to keep your application or dataset from ending up in an inconsistent, invalid state is to write bug-free code. But code is complex and difficult to write, and will invariably contain bugs in any non-trivial application, while redundance-free data structures and declarative integrity constraints are very easy to design and get right.
 
 
 Updating the information in the dataset
 
-The next thing that Miki is going to do is write methods that are equivalent to the Cell message handlers. Inserting a new person or gang is trivial and very similar in both languages, so Miki will not even bother to show you the code for that. Instead, he will start with the code that records the fact that a person has joined a gang, or that two people have met. Here's the Cell code for that:
+We're now going to write methods that are equivalent to the Cell message handlers. Inserting a new user or group is trivial and very similar in both languages, so we will just skip that. Instead, we'll start with the code that allows a user to join a chat group, or two users to become online friends. Here's the Cell code for that:
 
-  SocialNetwork.have_met(person_1: Person, person_2: Person, day: Date, introduced_by: Person?) {
-    insert know_each_other(
-      self.person_1 | self.person_2,
-      met_on = self.day,
-      introduced_by = self.introduced_by if self.introduced_by?
-    );
+  OnlineForum.join_group(user: UserId, group: GroupId, date: Date, rank: Int); {
+    insert member(self.person, self.gang, joined_on: self.date, rank: self.rank);
   }
 
-  SocialNetwork.has_joined(person: Person, gang: Gang, date: Date, rank: Int); {
-    insert member(self.person, self.gang, joined_on = self.date, rank = self.rank);
+  OnlineForum.add_friendship(user1: UserId, user2: UserId, since: Date) {
+    insert friends(self.user1, self.user2, since: self.since);
   }
 
-Here too Miki's code is making use of some syntactic sugar that will only be available with version 0.3 of Cell. In C# the same functionality is implemented by the following methods of the {{Person}} class:
+In Java the same functionality is implemented by the following methods of the {{User}} and {{Group}} classes:
 
-{#{csharp/join-and-make-friends-with.html}#}
+{#{java/join-and-befriend.html}#}
 
-The C# code is slightly more complex, in the case of {{Join(..)}} because the same {{Membership}} object has to be inserted in both {{Person.memberships}} and {{Gang.memberships}}, and in the case of {{MakeFriendsWith(..)}} because the same {{Friendship}} object has to be added to the {{friendships}} member variables of both parties involved. But that's not much of deal.
+The Java code is slightly more complex, in the case of {{join(..)}} because the same {{Membership}} object has to be inserted in both {{User.memberships}} and {{Group.memberships}}, and in the case of {{befriend(..)}} because the same {{Friendship}} object has to be added to the {{friendships}} member variables of both parties involved. But that's not much of deal.
 
-The code that deletes data from the dataset, though, is more interesting. Here's the Cell version:
+The code that deletes data from the dataset, though, is more interesting. Here's the Cell version (it's a slightly more general version of the code we saw previously):
 
-  SocialNetwork.delete_person(id: Person) {
+  OnlineForum.delete_user(id: UserId) {
     id = self.id;
-    delete person(id), know_each_other(id | *);
-    leave_gang(id, g) : g <- member(id, ?);
+    delete user(id), friends(id, *);
+    leave_group(id, g) : g <- member(id, ?);
   }
 
-  SocialNetwork.delete_gang(id: Gang) {
-    delete gang(self.id), member(*, self.id);
+  OnlineForum.delete_group(id: GroupId) {
+    delete chat_group(self.id), member(*, self.id);
   }
 
-  SocialNetwork.leave_gang(person: Person, gang: Gang) {
-    leave_gang(self.person, self.gang);
+  OnlineForum.leave_group(user: UserId, group: GroupId) {
+    leave_group(self.user, self.group);
   }
 
-  using SocialNetwork {
-    leave_gang(Person person, Gang gang) {
-      delete member(person, gang);
-      if leader(gang) == person:
-        members = [p : p <- member(?, gang), p != person];
-        if members == []:
-          delete gang(gang);
-        else
-          max_rank_members = max_by(members, rank($, g));
-          new_leader = an_elem(max_rank_members);
-          update leader(gang, new_leader);
-        ;
+  using OnlineForum {
+    leave_group(UserId user, GroupId group) {
+      delete member(user, group);
+      members = [u : u <- member(?, group), u != user];
+      if members != []:
+        new_admin = an_elem(max_by(members, karma($, group)));
+        update admin(group, new_admin);
+      else
+        delete chat_group(group);
       ;
     }
   }
 
-The above code makes use of both features that are already available but we haven't encountered before and others that will only be available with version 0.3 . For the equivalent C# code Miki has added a {{Delete()}} methods to both {{Person}} and {{Gang}}:
+In Java, one would add a {{delete()}} methods to both {{User}} and {{Group}}:
 
-{#{csharp/social-network-remove.html}#}
+{#{java/online-forum-remove.html}#}
 
-Here the problems created by a bad data representation are more evident. The first thing Miki has to do is to add new "wiring" to his class model: both {{Person}} and {{Gang}} now need to have a pointer to {{SocialNetwork}}, since their {{Delete()}} methods need to remove the corresponding objects from the list of "live" objects that is held by {{SocialNetwork}}. That means adding a new member variable to both, changing both constructors and all places where objects of either class are instantiated. In a toy application like this it may not be much of a problem, but Miki has already enough experience of real-world software development to be familiar with this situation: implementing a new feature causes the classes/objects where the logic is located to need access to other nodes of the object graph, which has therefore to be augmented with some extra wiring. Depending on how "distant" the two parts of the graph are, many places in the codebase may have to be modified in order to "carry" a pointer to the required data structures from the place where it's already available to the one where it's now needed.
+Here the problems created by a bad data representation are more evident. The first thing we've to do is to add new wiring to the class model: both {{User}} and {{Group}} now need to have a pointer to {{OnlineForum}}, since their {{delete()}} methods need to remove the corresponding objects from the list of live objects that is held by {{OnlineForum}}. That means adding a new member variable to both, changing both constructors (not shown in the above code) and all places where objects of either class are instantiated. In a toy application like this one that may not be much of a problem, but everyone who has enough experience of real-world software development is familiar with this situation: implementing a new feature causes the classes/objects where the logic is located to need access to other nodes of the object graph, which has therefore to be augmented with some extra wiring. Depending on how "distant" the two parts of the graph are, many places in the codebase may have to be modified in order to carry a pointer to the required data structures from the place where it's already available to the one where it's now needed. This is a problem that completely disappears with the relational model.
 
-As was the case with the {{Join(..)}} and {{MakeFriendsWith(..)}} methods we saw before, the {{Delete()}} methods have more work to do because of the redundancy in the data: {{Person.Delete()}} has to leave all the gangs the person has joined, and remove the other side of each friendship, in orders to remove all traces of itself, while {{Gang.Delete()}} has to make all members of the gang leave it. And both of them need to remove the objects they belong to from {{SocialNetwork}} as we mentioned earlier.
+As was the case with the {{join(..)}} and {{befriend(..)}} methods we saw before, the {{delete()}} methods have more work to do because of the redundancy in the data: {{User.delete()}} has to leave all the chat groups the user has joined, and remove the other side of each friendship, in orders to remove all traces of itself, while {{Group.delete()}} has to make all members leave the group. And both of them need to remove the target objects from {{OnlineForum}} as we mentioned earlier.
 
-Another thing that Miki feels is making the code more difficult to understand and less elegant is the fact that there's a mutual dependency between {{LeaveGang(..)}} and {{RemoveMember(..)}}: each of them needs to call the other in order to complete its work, and therefore there has to be some check in place to avoid entering an infinite loop.
+Another thing that is making the code more difficult to understand and less elegant is the fact that there's a mutual dependency between {{leaveGroup(..)}} and {{removeMember(..)}}: each of them needs to call the other in order to complete its work, and therefore there has to be some check in place to avoid entering an infinite loop. It's an example of how easily a low-level data representation can lead to spaghetti code as soon as your data model includes relationships that need to be navigated in either direction.
 
-The same type of cyclical dependency in repeated with the {{Delete()}} methods and the corresponding {{Remove(..)}} methods in {{SocialNetwork}}. If those methods were simply defined as follow:
+The same type of cyclical dependency is repeated with the {{delete()}} methods and the corresponding {{remove(..)}} methods in {{OnlineForum}}. If the latter were simply defined like this:
 
-{#{csharp/social-network-bad-remove.html}#}
+{#{java/online-forum-bad-remove.html}#}
 
-they would be unsafe, because if they were erroneously called on their own by the user of Miki's classes (which could well happen since they are public) they would cause the dataset to enter an inconsistent state: the person or gang in question would be removed from the list of objects held by {{SocialNetwork}}, but would still be reachable from all the {{Membership}} and {{Friendship}} objects that reference them. Miki was even tempted to do away with the two {{Remove(..)}} methods in {{SocialNetwork}} altogether, and let {{Person}} and {{Gang}} remove themselves directly from SocialNetwork (using the instructions {{socialNetwork.people.Remove(id)}} and {{socialNetwork.gangs.Remove(id)}} respectively), but that would violate the rule he had set for himself at the beginning of the project: all changes to the state of an object can only be carried out by the methods of its class. Violating the principle of encapsulation like that would cause other problems further down the road, as we'll see in the next paragraph.
+they would be unsafe, because if they were erroneously called on their own by the user of our classes (which could well happen since they are public) they would cause the dataset to enter an inconsistent state: the user or group in question would be removed from the list of objects held by {{OnlineForum}}, but would still be reachable from all the {{Membership}} and {{Friendship}} objects that reference them.
 
 
 Searches
 
-Miki is now going to implement one of the (read-only) methods that we saw previously, {{people_born_on(..)}}:
+Let's now implement one of the (read-only) methods that we saw previously, {{users_who_signed_up_on(..)}}:
 
-  using SocialNetwork {
-    [PersonId] people_born_on(Date d) = [p : p <- date_of_birth(?, d)];
+  using OnlineForum {
+    [UserId] users_who_signed_up_on(Date d) = [u : u <- signup_date(?, d)];
   }
 
-This is what Miki came up with:
+This is one way to implement it, using the {{Multimap}} class in Google's Guava libraries:
 
-{#{csharp/people-by-date-of-birth.html}#}
+{#{java/users-by-signup-date.html}#}
 
-The {{PeopleBornOn(..)}} method and the {{peopleByDateOfBirth}} member variable are new, while {{Add(..)}} and {{Remove(..)}} where already there, but had to be modified to support the new functionality. The lines of code that have been added to them are marked by the {{// NEW}} comment (The {{Add(...)}} methods was not shown before, as it was a trivial one-liner).
+The {{usersWhoSignedUpOn(..)}} method and the {{usersBySignupDate}} member variable are new, while {{add(..)}} and {{remove(..)}} were already there, but had to be modified to support the new functionality (The {{add(...)}} methods was not shown before, as it was a trivial one-liner).
 
-Note that if Miki had decided to violate the encapsulation of {{SocialNetwork}} in the previous paragraph, it would have been easier for him to miss the fact that his code needed to be modified after the addition of {{peopleByDateOfBirth}}.
+Here the changes to the Java code are trivial, but that still has to be repeated for each type of search for which efficiency is a concern, and there's always the possibility that one might miss some of the locations in one's code that need to be updated. With the relational model, on the other hand, you get efficient searches for free.
 
 
-What Miki has learned so far...
+Conclusions
 
-Miki could of course have designed his C# data structures differently, and he actually had to choose between a number of possible designs none of which was clearly superior to the others, but each of which involved a number of trade-offs, and Miki is not even sure he chose the best one for his application (He is, by the way, open to suggestions. If you see a way to improve his code, leave a message in the {#{forum-link}#}). This stand in sharp contrast with what happened when writing the Cell schema. In that case, there was a single, obvious way to design it, and Miki is positive that if ten different developers had been given the same informal specifications to implement they would all have come up with essentially the same data schema.
+There's obviously only so much that can be gathered from a toy example like this, but some of the issues that affect code written in a low-level programming paradigm like OOP should already be discernible:
 
-Furthermore, the Cell schema did not need any changes to its initial version, unlike the C# data structures which required several additions that were discovered only in a later stage of the application development, and which involved several code changes that were spread out all over the code base. None of these additions actually added any information to the dataset, their only purpose was either to allow the code to navigate it, or to avoid performing unnecessarily slow searches.
+** Data structures are significantly more complex than they should be, and contain a lot of redundancy
+** Code that updates those same data structures ends up being longer and more difficult to write, mainly because of data redundancy
+** Redundancy and the lack of declarative integrity constraints make it way, way easier to have bugs that lead to an inconsistent and invalid application state
+** There's a nontrivial amount of effort that has to be spent writing and maintaining code that wires the object graph and creates and updates the extra data structures that are needed to efficiently search your data. Using relations makes those issues disappear
+** None of the above problems are specific to Java: instead, they affect any programming language that uses records and pointers in its data model, and that includes all object-oriented languages
 
-Miki already appreciated the advantages offered by the relational model, but one thing he was not aware of previously is that relational data structures seem to be intrinsically more "stable" that their counterparts in low-level programming paradigms like OOP, and he suspects that might actually be a non-trivial advantage for software development, since every change to the data structures invariably involves changes to the actual code.
-
-Miki is not done yet with his software development experiments. He's going to try again soon with a larger application. Stay tuned.
+One thing that cannot be gauged by a simplistic example like this one is the magnitude of the savings in terms of code size (and complexity) that are made possible by the use of the relational model. For that, we definitely need a bigger and more realistic example, but that will have to wait until version 0.3 of the language is out. Stay tuned.

@@ -1,6 +1,7 @@
 An overview of Cell
 
-The purpose of this section is to provide a bird's eye view of the Cell programming language, by emphasizing its unique features and explaining how it differs from every other programming language I know, in order to give you a sense of what it can be useful for. You may also want to read the {#{quick-link}#} either before or after reading this. Note though that both overviews are rather long, abstract and contain no code. If you are just curious to find out what the language looks like and what it can be used for, start with the introductory {#{example-link}#} instead.
+The purpose of this section is to provide a bird's eye view of the Cell programming language, by emphasizing its unique features and explaining how it differs from every other programming language I know, in order to give you a sense of what it can be useful for.
+Be warned though that this overview is not for the faint of heart: it's long, abstract and contains no code. If you are just curious to find out what the language looks like and what it can be used for, start with the introductory {#{example-link}#} instead.
 
 
 The functional sublanguage

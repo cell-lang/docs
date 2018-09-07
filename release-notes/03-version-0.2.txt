@@ -1,0 +1,9 @@
+Cell &#x279e; Java compiler version 0.2
+
+Version 0.2 of the Cell to Java code generator is now available. The compiler is now able to take advantage of type declarations to generate optimized code. Preliminary benchmarks are available {#{benchmarks-link}#}.
+
+There have been a few other minor changes. The map lookup operation, {{map(key, !!)}}, now can be written more succinctly as {{map(key)}}. That bit of syntactic sugar was already available for mutable relation variables, but now is available for all binary relations.
+
+There's also another couple changes that have been been backported to version 0.1 as well. The use of parentheses for grouping complex expression has changed again (hopefully for the last time). That's explained in the chapter on {#{functions-link}#}, in the "Evaluation order" paragraph. The other change is support for unicode inside string literals. Source files have to be in UTF-8 format, and non-ascii characters are only allowed inside string literals and comments.
+
+Version 0.2 is going to be Java-only, since there's still a number of features missing that are needed before the language can be used in the real world. They will be implemented with version 0.3 (ETA: January/February 2019 for the Java version) which will also bring code generators for C, C++ and C#.
