@@ -9,7 +9,7 @@ On the Java side, in order to avoid boring boilerplate code that would make the 
 
 Data structures
 
-We've already seen the Cell schema for the core logic of Miki's application:
+We've already seen the Cell schema for the core logic of our online forum:
 
   type UserId  = user_id(Int);
   type GroupId = group_id(Int);

@@ -16,9 +16,11 @@ Systems like these are difficult to fit into the rigid, sequential execution mod
 
 Although Cell is, in and of itself, a general-purpose language, that can be used to write entire applications (the Cell compiler, for example, is entirely written in Cell), that's not what it is designed for. It is, instead, meant to be used as a domain-specific language, that complements your primary language, instead of replacing it. Compiling a Cell codebase produces a set of classes in your language of choice, which can be easily integrated into an existing project. Code generators for C++, Java and C# are already available, and other languages will follow.
 
+The long term goal of the Cell project is to define and implement a programming model that can be used to write client/server software so as to have the compiler generate code for both client and server (in different languages if need be) and automatically take care of all aspect of network programming that can be abstracted away (things like communication between client and server, error handling and persistence) and to minimize the developer intervention when dealing with those issues (mainly concurrency) that cannot be completely hidden by the language and the network infrastructure. Such programming model will depend heavily on the unconventional capabilities of Cell, like orthogonal persistence and the ability to replay and rewind the execution of a program. You can read more about it {#{network-model-link}#}.
+
 If you have any question, there's the {#{google-group-link}#} Google Group. For announcements, there's {#{twitter-link}#} on Twitter.
 
-The Cell compiler is open source software, and all source code is available on {#{src-repos-link}#}.
+The Cell compiler is free and open source software, and all source code is available on {#{src-repos-link}#}.
 
 
 News
