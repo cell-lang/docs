@@ -1,0 +1,169 @@
+Wiring relational automata together
+
+Relational automata are meant to be rather large data structures, storing data about many different entity types, with all their attributes and relationships. Still, once your application grows beyond a certain size, you'll want to partition the information it handles into several domains (and therefore several automata). As an example, let's say you want to create an online marketplace for used books, where anyone can register as either a buyer or a seller. In order to sell their used books sellers have to create listings: with each listing they can put up for sale any number of copies of a specific book, and buyers can choose to buy any number of copies of a book from one of the listings. There's also going to be a catalog, which is provided by the administrator of the marketplace, and cannot by edited by sellers. Here's how a toy version of the schema could look like:
+
+  type AuthorId   = author_id(Nat);
+  type BookId     = book_id(Nat);
+  type SellerId   = seller_id(Nat);
+  type BuyerId    = buyer_id(Nat);
+  type ListingId  = listing_id(Nat);
+
+  type Money = dollar_cents(Nat);
+
+  type BookCondition = new, like_new, very_good, good,
+                       has_issues(descr: String);
+
+  schema BookMarket {
+    next_author_id    : Nat = 0;
+    next_book_id      : Nat = 0;
+    next_seller_id    : Nat = 0;
+    next_buyer_id     : Nat = 0;
+    next_listing_id   : Nat = 0;
+
+    author(AuthorId):
+      name : String;
+
+    book(BookId):
+      title : String,
+      isbn  : String,
+      by+   : AuthorId,
+      listed_price : Money;
+
+    seller(SellerId):
+      name : String;
+
+    buyer(BuyerId):
+      name : String;
+
+    listing(ListingId):
+      seller_id : SellerId,
+      book_id   : BookId,
+      condition : BookCondition,
+      price     : Money,
+      amount    : NzNat;
+
+    purchased(BuyerId, ListingId, NzNat) [key: 0:1];
+  }
+
+If one wanted to somehow partition the information contained in {{BookMarket}}, one way to do it would be to split it into three domains, the first one containing information about books and authors, the second about buyers and sellers, and the last one about offerings and purchases. The first two would be standalone domains, while the last one would be conceptually dependent on the others: you can't really talk about listings and purchases without also talking about books, sellers and buyers. Here's the refactored code:
+
+  schema Publishing {
+    next_author_id : Nat = 0;
+    next_book_id   : Nat = 0;
+
+    author(AuthorId):
+      name : String;
+
+    book(BookId):
+      title : String,
+      isbn  : String,
+      by+   : AuthorId,
+      listed_price : Money;
+  }
+
+  schema Actors {
+    next_seller_id : Nat = 0;
+    next_buyer_id  : Nat = 0;
+
+    seller(SellerId):
+      name : String;
+
+    buyer(BuyerId):
+      name : String;
+  }
+
+  schema Market : Publishing, Actors {
+    next_listing_id : Nat = 0;
+
+    listing(ListingId):
+      seller_id : SellerId,
+      book_id   : BookId,
+      condition : BookCondition,
+      price     : Money,
+      amount    : NzNat;
+
+    purchased(BuyerId, ListingId, NzNat) [key: 0:1];
+  }
+
+The only thing that is new here is the reference to {{Publishing}} and {{Actors}} in the declaration of {{Market}}. It states that the information contained in the latter automaton is dependent on that contained in first two. In practice, this means that whenever you create an instance of {{Market}} you need to provide a reference to an instance of both {{Publishing}} and {{Actors}}, which methods and message handlers of {{Market}} have access to, but only in read-only mode. This wiring is static: once an automaton instance has been created, there's no way to change it. When creating those instances in Cell (as opposed to doing that from the host language in a mixed-language application) the wiring is not only fixed, but it's also entirely known at compile time. We will discuss the details later, when we see how automata are instantiated and used. Dependencies between automata cannot be cyclical: two distinct automaton types are not allowed to reference, directly or indirectly, each other, and consequently neither are their instances. If two knowledge domains depend on each other, you'll have to merge them into a single one.
+
+Foreign keys do not work yet across automata: for example, it's not possible at the moment to declare a foreign key from a field like {{book_id}} in {{Market}} to the {{book}} unary relation/set in {{Publishing}}. This will be fixed in a future release.
+
+Note that the above example is just meant to demonstrate automata wiring, and it should not be taken as design advice: in general, it doesn't make much sense to partition a tiny schema like {{BookMarket}} into even smaller ones. As already mentioned above, schemas are meant to be large data structures, containing information about an entire knowledge domain or subdomain, not about a single conceptual entity. But in a real application such schemas would be much larger, and therefore the data would have to be partitioned in order to stay manageable: in a company like Amazon.com, for example, customer data, product catalogs and information about orders are managed by different teams and stored in different databases, each of which has dozens or even hundreds of tables.
+
+One note about terminology: in what follows I will use to terms dependant and dependee to indicate the automata involved in this kind of relationship: that is, {{Publishing}} and {{Actors}} are dependees of {{Market}}, and {{Market}} is a dependant of both {{Publishing}} and {{Actors}}.
+
+Note also that the relatioship between dependant and dependees does not fit any of the standard relationship types you have in OOP: the exact details will be explain later, but it's not inheritance, nor composition, or aggregation, or association or even delegation, although it shares some characteristics with all of them.
+
+
+Methods
+
+Methods of dependant automata can freely access member variables of the dependees, just as if they belonged to the dependant, with one exception. Here's an example:
+
+  schema Dependee {
+    var(Int, String) [key: 0];
+  }
+
+  schema Dependant : Dependee {
+    var : Float;
+  }
+
+Here the name {{var}} is bound to a binary mutable relation variable in {{Dependee}}, and to an ordinary member variables in {{Dependant}}. The two variable have no relationship to each other, apart from having the same name: in particular, there's no "overriding" of any sort taking place. Any reference to the name {{var}} will be statically (that is, at compile time) bound to the binary relation in methods of {{Dependee}}, and to the floating-point variable in methods of {{Dependant}}. The following method, for example, will work when declared inside {{Dependee}}:
+
+  using Dependee {
+    Bool associate_to_the_same_string(Int i, Int j) = var(i) == var(j);
+  }
+
+but will be rejected if declared inside {{Dependant}}:
+
+  using Dependant {
+    ## ERROR: DOES NOT COMPILE
+    ## THE SYMBOL var REFERENCES Dependant.var IN THIS CONTEXT
+    Bool associate_to_the_same_string(Int i, Int j) = var(i) == var(j);
+  }
+
+A similar problem happens when there are two dependees, that have a variable by the same name:
+
+  schema Dependee1 {
+    var(Int, String) [key: 0];
+  }
+
+  schema Dependee2 {
+    var : Float;
+  }
+
+  schema Dependant : Dependee1, Dependee2 {
+
+  }
+
+Here too the following code will be rejected:
+
+  using Dependant {
+    ## ERROR: DOES NOT COMPILE
+    ## THE COMPILER CANNOT DECIDE WHETHER THE SYMBOL var SHOULD
+    ## REFERENCE Dependee1.var OR Dependee2.var IN THIS CONTEXT
+    Bool associate_to_the_same_string(Int i, Int j) = var(i) == var(j);
+  }
+
+The same rules apply to methods: a method call will be bound to the dependant's copy if such a copy exists, or to the dependee's otherwise. Similarly, if a method is defined in more than one dependee but not in the dependant any reference to it will be rejected. Methods with the same name but different arities are considered distinct though, so no ambiguities arise in that case.
+
+Dependees are totally oblivious to the existence of dependants, so they cannot access their variables or methods in any way, and neither can the semantics of their methods be affected in any way by the presence of dependants: again, this is not inheritance, and there's no overriding of any sort going on here.
+
+
+Nested automata
+
+Relational automata can not only be wired together, but also nested inside one another. Here's an example:
+
+  schema CounterPair {
+    counter_1 : Counter;
+    counter_2 : Counter;
+  }
+
+It defines a new automaton, {{CounterPair}}, which contains two instances the {{Counter}} automaton defined earlier. When {{CounterPair}} is instantiated, the two nested instances of {{Counter}} are automatically created as well, bound to the {{counter_1}} and {{counter_2}} fields. This is a sample value for the state of {{CounterPair}}:
+
+  ( counter_1: (value: 1, updates: 1),
+    counter_2: (value: 0, updates: 0)
+  )
+
+As you can see, the state of nested automata simply becomes part of the state of their parent, and can be updated only as part of an update of the state of their parent. We'll say more about that when we talk about updates and message handlers in the next chapter.
+Just like mutable relation variables, and automaton variables in general, nested automata cannot be aliased, that is, variables like {{counter_1}} and {{counter_2}} cannot be copied and are in general subject to the same limitations that apply to mutable relation variables. The fields/member variables of nested automata, on the other hand, can be accessed (using the familiar {{counter_1.value}} syntax) just like the fields of their parents: with no restrictions for ordinary member variables, and with all the restrictions that apply in the case of mutable relation variables.

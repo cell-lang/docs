@@ -1,6 +1,10 @@
 Getting started
 
-The Cell code generators can be downloaded here: {#{download-java-link}#},  {#{download-cpp-linux-link}#} and {#{download-csharp-link}#}. The Java code generator is at version 0.2, while the C++ and C# ones are still stuck at version 0.1. After you unzip the file, you'll see five directories: {{bin}}, {{stdlib}}, {{examples}}, {{src}} (only for C++) and {{sublime-text}}. The first one contains the Cell compilers/code generators (there's one for each target language), the second one the standard library (which at the moment consists of just one file, {{prelude.cell}}), and the third one a few ready-to-build examples to get you started. To create your own project, just pick the one of them and start making changes to it. You can find more information about them in {{examples/README.txt}}.
+The latest version (0.3) of the Java code generator can be downloaded {#{download-java-link}#}.
+
+This release is Java-only, but version 0.1 of the {#{download-cpp-linux-link}#} and {#{download-csharp-link}#} code generators is still available. They can be used to experiment with the functional subset of the language and reactive automata, which have changed very little from 0.1 to 0.3 (save for performance optimization) but if you're interested in relational automata those versions are now completely obsolete. New versions of the C++ and C# code generators will be released again with version 0.5.
+
+After you unzip the file, you'll see four directories: {{bin}}, {{stdlib}}, {{examples}} and {{sublime-text}}. The first one contains the compiler, the second one the standard library (which at the moment consists of just one file, {{prelude.cell}}), and the third one a few ready-to-build examples to get you started. To create your own project, just pick one of them and start making changes to it. You can find more information about them in {{examples/README.txt}}.
 
 Each of the code generators produces, when the compilation process is successful, one or more source files in the target language. These files can then be fed directly to a compiler for the corresponding language if your Cell source code includes a {{Main(..)}} procedure, or otherwise included in an existing project.
 
@@ -16,6 +20,15 @@ There's no debugger for Cell, and debugging is done mainly by tracing the execut
 Sometimes there's no choice but to debug the generated code. The code itself is all but incomprehensible, but the names of variables and functions are the same as in the Cell sources, with the addition of a short suffix that is needed to avoid name clashes. For example a two-argument non-polymorphic function named {{my_fn(..)}} in Cell will be named {{my_fn_F2(..)}} in the generated code, and a variable named {{my_var}} will become {{my_var_V}}. How to print the value of a variable containing/pointing to a Cell object is language-specific, and is described in the following sections.
 
 
+Java
+
+The Java code generator is provided as a jar file, {{cellc-java.jar}}. To run it, just type {{java -jar cellc-java.jar <project file> <output directory>}}, assuming {{cellc-java.jar}} is in the current directory . The compiler will produce a {{Generated.java}} file containing the core logic, and a separate file for each of the public classes you'll be interacting with. Their interface is documented in pseudo-Java code in another generated file, {{interfaces.txt}}.
+
+In order to compile your code in debug mode, and have it print a complete stack trace when an error occurs, you'll have to use the {{-d}} option of the compiler: {{java -jar cellc-java.jar -d <project file> <output directory>}}. Execution times normally increase by less than 50% in debug mode.
+
+If you want to inspect the content of a variable containing a Cell object when debugging the generated code, just print the output of its {{toString()}} method.
+
+
 C++
 
 The output of the C++ code generator ({{cellc}}) is the {{generated.cpp}} source file. You'll need a compiler that supports C++11. If your project defines any automata, of either type, the compiler will also produce a second files, {{generated.h}}, which contains the declaration of the interface of the generated classes that you'll be dealing with from your own native C++ code.
@@ -25,15 +38,6 @@ The C++ code generator is provided as a Linux binary, but if you're using anothe
 The {{NDEBUG}} preprocessor symbol is used to choose between debug and release mode. It's the same symbol used by the C {{assert(..)}} macro. Defining it when compiling the generated C++ code will disable all the extra debugging code. With GCC, that can be done with the {{-DNDEBUG}} command line argument. The code compiled in debug mode is an order of magnitude slower, so make sure that symbol is defined when building your production binaries.
 
 To print the value of a Cell variable {{my_var}} (which, as explained before, will be named {{my_var_V}} in the generated code) in GDB you'll need to type {{call print(my_var_V)}} at the debugger prompt.
-
-
-Java
-
-The Java code generator is provided as a jar file, {{cellc-java.jar}}. To run it, just type {{java -jar cellc-java.jar <project file> <output directory>}}, assuming {{cellc-java.jar}} is in the current directory . The compiler will produce a {{Generated.java}} file containing the core logic, and a separate file for each of the public classes you'll be interacting with. Their interface is documented in pseudo-Java code in another generated file, {{interfaces.txt}}.
-
-In order to compile your code in debug mode, and have it print a complete stack trace when an error occurs, you'll have to use the {{-d}} option of the compiler: {{java -jar cellc-java.jar -d project.txt}}. Execution times normally increase by less than 50% in debug mode.
-
-If you want to inspect the content of a variable containing a Cell object when debugging the generated code, just print the output of its {{toString()}} method.
 
 
 C#

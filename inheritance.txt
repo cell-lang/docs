@@ -1,0 +1,115 @@
+Hierarchical classification and polymorphism
+
+Sometimes (some of) the entities in your application domain can be classified hierarchically, and we're now going to see how inheritance can be modeled in Cell. Keep in mind though that this is not the only way to do it and that the necessary support hasn't entirely materialized yet: some integrity constraints are still missing, and so is some much needed syntactic sugar.
+
+As an example, let's say we've to build a very simple payroll system for a company that pays its employees on a weekly basis. Employees are of four types: salaried employees are paid a fixed weekly salary regardless of the number of hours worked, hourly employees are paid by the hour and receive overtime pay (i.e., 1.5 times their hourly salary rate) for all hours worked in excess of 40 hours, commission employees are paid a percentage of their sales and base-salaried commission employees receive a base salary plus a percentage of their sales.
+
+The first step is to create typed identifiers for each of the four types of employees and to arrange them hierarchically:
+
+  type SalariedEmployee   = salaried_employee(Nat);
+  type HourlyEmployee     = hourly_employee(Nat);
+  type CommissionEmployee = commission_employee(Nat);
+  type BasePlusEmployee   = base_plus_employee(Nat);
+
+  type AnyCommissionEmployee = CommissionEmployee,
+                               BasePlusEmployee;
+
+  type Employee = SalariedEmployee,
+                  HourlyEmployee,
+                  CommissionEmployee,
+                  BasePlusEmployee;
+
+The type {{Employee}} is the superset of all employee types, and {{AnyCommissionEmployee}} includes all employees that earn a commission on their sales, regardless of whether they also have a base salary or not. Note that the only purpose of these datatypes is to identify employees and their types, not to carry around all information that is associated with them, which will be instead stored using relations. The following {{Workforce}} schema defines the attributes of each type of employee: some are shared among all types of employees, like {{first_name}}, {{last_name}} and {{ssn}}, others apply only to a specific type of employees, like {{weekly_salary}} for salaried employees, and finally there's a couple of attributes, {{gross_sales}} and {{commission_rate}}, that are shared by all types of employees that can earn commissions, hence the declaration of their base type {{AnyCommissionEmployee}}:
+
+  schema Workforce {
+    // Next unused employee id
+    next_employee_id : Nat = 0;
+
+    // Shared attributes of all employees
+    employee(Employee):
+      first_name  : String,
+      last_name   : String,
+      ssn         : String;
+
+    // Attributes of salaried employees
+    employee(SalariedEmployee):
+      weekly_salary : Money;
+
+    // Attributes of hourly employees
+    employee(HourlyEmployee):
+      hourly_wage  : Money,
+      hours_worked : Float;
+
+    // Attributes of all employees that earn commissions,
+    // including those with base salary + commissions
+    employee(AnyCommissionEmployee):
+      gross_sales     : Money,
+      commission_rate : Float;
+
+    // Attributes of employees with base salary + commissions
+    employee(BasePlusEmployee):
+      base_salary : Money;
+  }
+
+As usual, our schema declaration makes use of a lot of syntactic sugar. It's completely equivalent to the following, less syntactically sugared version:
+
+  schema Workforce {
+    // Next unused employee id
+    next_employee_id : Nat = 0;
+
+    // Salaried employees and their attributes
+    employee(SalariedEmployee):
+      first_name    : String,
+      last_name     : String,
+      ssn           : String,
+      weekly_salary : Money;
+
+    // Hourly employees and their attributes
+    employee(HourlyEmployee):
+      first_name    : String,
+      last_name     : String,
+      ssn           : String,
+      hourly_wage   : Money,
+      hours_worked  : Float;
+
+    // Commissions-only employees and their attributes
+    employee(CommissionEmployee):
+      first_name      : String,
+      last_name       : String,
+      ssn             : String,
+      gross_sales     : Money,
+      commission_rate : Float;
+
+    // Employees with base salary + commissions and their attributes
+    employee(BasePlusEmployee):
+      first_name      : String,
+      last_name       : String,
+      ssn             : String,
+      gross_sales     : Money,
+      commission_rate : Float,
+      base_salary     : Money;
+  }
+
+The difference is that in the first, terser version all attributes that are common to all employees are just declared once, and so are those that are shared by all employees that earn commission.
+
+Now we can define the polymorphic {{earnings(..)}} method, which is implemented differently for each type of employee:
+
+  using Workforce {
+    Money earnings(SalariedEmployee e) = weekly_salary(e);
+
+    Money earnings(HourlyEmployee e) {
+      hours = hours_worked(e);
+      wage = hourly_wage(e);
+      earnings = hours * wage;
+      earnings = earnings + 0.5 * {hours - 40.0} * wage if hours > 40.0;
+      return earnings;
+    }
+
+    Money earnings(CommissionEmployee e) =
+      commission_rate(e) * gross_sales(e);
+
+    Money earnings(BasePlusEmployee e) =
+      base_salary(e) + commission_rate(e) * gross_sales(e);
+  }
+
+As you can see, polymorphic methods are just like polymorphic function, except that they have access to the state of an automaton, which in this case contains the data associated with the entities they manipulate.

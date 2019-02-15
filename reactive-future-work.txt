@@ -1,0 +1,325 @@
+Future work
+
+As already mentioned, reactive automata are at this stage experimental, and rather limited in expressive power: it's easy to come up with examples of systems that are indisputably reactive in nature that nonetheless cannot be implemented using reactive automata in their current form. Here we will discuss some improvements that are planned for the not-too-distant future. This list is not exhaustive of course, and no individual feature is described in a lot of detail, so you'll have to use your imagination to fill the gaps.
+
+
+Indexed signals
+
+Currently reactive automata can only handle a fixed set of signals, and each rule can only define or update a single signal. Many types of reactive systems though comprise a variable number of signals, that is not known at compile time. Moreover, signals often can come into and go out of existence dynamically. Even when the set of signals is indeed fixed, it can include a large number of similar signals, which are processed in a similar way. As an example, consider the case of automation software that controls several identical external devices, or processes the inputs of an array of similar sensors. In a videogame where you control variable numbers of units, you might want to trigger an action when any of them enters a certain area, or only when all of them have performed a certain action or reached a given level.
+
+Say, for example, that you have a number of similar sensors, and you want, for each of them, to keep track of how many reading errors they produced. This is how you could possibly do it right now:
+
+  // The only purpose of {{SensorId}} is to identify individual sensors
+  // It doesn't have to be a tagged integer of course, but
+  // it can be any arbitrarily complex user-defined type
+  type SensorId = sensor_id(Nat);
+
+  reactive ReadingErrors {
+    input:
+      // Whenever we have a batch of new sensor readings,
+      // we feed it to {{ReadingErrors}} as a map that associate
+      // the sensor id with the result of the read operation.
+      // {{just(x)}} indicates a successful read that produced
+      // the value {{x}} while {{nothing}} indicates a reading error
+      readings* : [SensorId -> Maybe[Float]];
+
+    output:
+      error_counts : [SensorId -> NzNat];
+
+    state:
+      // Maps associating the id of every sensor with the total
+      // number of its reading errors. Sensors that never
+      // produced reading errors are not in the map
+      error_counts : [SensorId -> NzNat] = [];
+
+    rules:
+      // Identifying the sensors that produced a reading error
+      error_sensors := [s : s, r <- readings, r == nothing];
+
+      // Incrementing the error counts, if necessary
+      error_counts = increment_counters(error_counts, error_sensors)
+                                if error_sensors != [] : error_sensors;
+  }
+
+  [T -> NzNat] increment_counters([T -> NzNat] ctrs, [T] incr_keys) {
+    incr_ctrs = [if incr_keys(k) then nz_nat(k+1) else k : k, n <- ctrs];
+    new_ctrs = [k -> 1 : k <- incr_keys, not ctrs(k, *)];
+    return incr_ctrs & new_ctrs;
+  }
+
+This solution may be sort of acceptable in simple cases like this one, but in more complex situations, it would basically negate many of the advantages of reactive programming. If you encode a group of signals using a map, every time each individual signal changes you'll end up triggering a lot of recalculations even for the signals that did not change; the code that processes those signal will become more complex, as shown by the use of {{increment_counters(..)}} above; and you will not be able to use temporal rules on individual signals: if for example you wanted to keep a list of those signals that haven't had a reading error in the last 10 minutes, the approach used above wouldn't work.
+
+Here's how you'll be able to express the same logic in some future version of Cell:
+
+  reactive ReadingErrors {
+    input:
+      reading(SensorId)* : Maybe[Float];
+
+    output:
+      err_count(SensorId) : NzNat;
+
+    state:
+      err_count(SensorId) : Nat = 0;
+
+    rules:
+      err_count(id) = err_count(id) + 1 if reading(id) == nothing;
+  }
+
+Here {{reading}} is not a single signal, but rather a family of signals that share the same name, and are identified by a parameter, which in this case is a value of type {{SensorId}}. That is, you'll be dealing with a possibly infinite number of signals of the form {{reading(sensor_id(N))}}: {{reading(sensor_id(0))}}, {{reading(sensor_id(1))}}, {{reading(sensor_id(2))}} and so on. Of course at any given point in time only a (finite) number of them will be defined.
+
+The same happens with {{err_count}}: it's actually a family of state variables, one for each possible value in {{SensorId}}: {{err_count(sensor_id(0))}}, {{err_count(sensor_id(1))}} and so on. When the system is initialized there will be no need to allocate any memory for any of them, since they will all have the same value, which can be stored only once. Memory for any specific individual variable will be allocated only when such variable is assigned for the first time after initialization.
+
+Say, for example, that after initialization input {{reading(sensor_id(12))}} is set with a value of {{nothing}}. That will trigger the only rule in the automaton, which will be instantiated with {{id = sensor_id(12)}}, therefore assigning the value {{1}} to {{err_count(sensor_id(12))}}. All other state variables in the {{err_count}} family will of course be left untouched.
+
+Even in a very simple example like this, the code is noticeably simpler (and not significantly more complex than in the single-signal case). To give you another example, here's how you could implement the has-it-had-an-error-in-the-last-10-minutes logic mentioned earlier:
+
+  reactive ReadingErrorsInLast10Minutes {
+    input:
+      reading(SensorId)* : Maybe[Float];
+
+    output:
+      had_error(SensorId) : Bool;
+
+    rules:
+      had_error(id) = not 600s since reading(id) == nothing;
+  }
+
+It will also be possible to define rules that target only specific signals in the family, and to manipulate the entire group of signals using the same aggregate functions used with relational automata. You'll also be able to defined indexed nested automata:
+
+  nested_auto(id) = NestedAuto(input1=signal1(id), input2=signal2);
+
+This is a major feature, both in the sense that it will substantially increase the expressive power of reactive automata, and in the (bad) sense that I expect its implementation to be nontrivial.
+
+
+External automata
+
+Let's go back to the mine sump example we used throughout our discussion of reactive automata. Let's say we want add a new input, a feedback signal from the pump that tells us if it's working properly or if there's a problem. Here's a revised picture:
+
+{#{mine-pump-2.svg}#}
+
+In our code, we would have to add a new input to {{MineController}}:
+
+  reactive MineController {
+    input:
+      lower_sensor_submerged : Bool;
+      upper_sensor_submerged : Bool;
+
+      methane_level : Int;
+      co_level      : Int;
+      airflow_level : Int;
+
+      pump_is_working : Bool; // New input
+
+    output:
+      pump_on           : Bool;
+      evacuation_needed : Bool;
+      error_detected    : Bool;
+
+    ...
+  }
+
+There's at least a couple problems here: the first one is that every input or output of the whole system will have to be declared in the topmost automaton, which might end up having dozen or even hundreds of inputs and outputs in a complex application. The other problem is that the {{pump_is_working}} and {{pump_on}} are logically related, since they're both associated with the pump, but that's not reflected in the code. If the pump had several input (in order to provide finer-grained control of its operations) and output signals (to have better diagnostics) both problems would get a lot worse. So it would make sense to have an artifact in the code where all those signals could be located.
+
+In order to do so, the language will introduce the notion of external automata. Here's how it would work for our pump:
+
+  external Pump {
+    input:
+      on : Bool;
+
+    output:
+      is_working : Bool;
+  }
+
+Unlike normal reactive automata, {{Pump}} is not meant to contain any application logic, but it's only a "placeholder" that represents the external device. Note that the signals here are classified according to the pump's perspective: {{on}} is an input for the pump, but an output for the controller, and conversely {{is_working}} is an output for the pump, but an input for the controller. {{Pump}} would be then declared just as if it were an ordinary nested automaton inside {{MineController}}:
+
+  reactive MineController {
+    input:
+      lower_sensor_submerged : Bool;
+      upper_sensor_submerged : Bool;
+
+      methane_level : Int;
+      co_level      : Int;
+      airflow_level : Int;
+
+      // Replaced by {{pump.is_working}}
+      // pump_is_working : Bool;
+
+    output:
+      evacuation_needed : Bool;
+      error_detected    : Bool;
+
+      // Replaced by {{pump.on}}
+      // pump_on : Bool;
+
+    ...
+
+    rules:
+      // All signals coming from and going to the pump are now
+      // grouped inside {{pump}}: {{pump.on}}, {{pump.is_working}}
+      pump = Pump(
+        // Directly "setting" the pump input
+        on = needs_draining and not methane_level_critical
+      );
+
+      ...
+  }
+
+Inside {{MineController}} the expression {{pump.on}} would be treated just like any other output, and {{pump.is_working}} like any other input. In the client code, you will be able to set {{pump.is_working}} and read {{pump.on}} exactly in the same way you would have set or read {{pump_is_working}} and {{pump_on}} in the initial version of {{MineController}}:
+
+  mine_controller_instance.pump.is_working = true;
+
+  on = mine_controller_instance.pump.on;
+
+Using this feature, you would be able to have reactive automata with very few explicitly declared inputs and outputs, or even none at all.
+
+External automata are just glorified syntactic sugar: they will be implemented by having the compiler internally rewrite the above automaton like so:
+
+  reactive MineController {
+    input:
+      lower_sensor_submerged : Bool;
+      upper_sensor_submerged : Bool;
+
+      methane_level : Int;
+      co_level      : Int;
+      airflow_level : Int;
+
+      // Internally generated by the compiler during the rewrite step
+      pump.is_working : Bool;
+
+    output:
+      evacuation_needed : Bool;
+      error_detected    : Bool;
+
+      // Internally generated by the compiler during the rewrite step
+      pump.on : Bool;
+
+    ...
+
+    rules:
+      // Internally removed by the compiler during the rewrite step
+      // pump = Pump;
+
+      // Internally generated by the compiler during the rewrite step
+      pump.on = needs_draining and not methane_level_critical;
+
+      ...
+  }
+
+In spite of being relatively easy to implement, I believe this feature will make reactive automata much more modular, and easier to work with when modeling complex systems with large numbers of inputs and outputs.
+
+
+Cyclical and/or variable dependency graphs
+
+At the moment dependencies between signals cannot be cyclical, that is, two signals {{s1}} and {{s2}} cannot depend on each other: either {{s1}} depends on {{s2}}, or {{s2}} depends on {{s1}}, or they're independent of one another. This constraint is common to all reactive frameworks or languages I know of, because without any restrictions in place reactive systems could produce all sorts of crazy behaviors, and it would probably be impossible to even come up with a reasonable semantics for them.
+
+Yet prohibiting all cyclical dependencies is too strong a restriction. I know examples of systems that are clearly reactive in nature that contain cyclical dependencies that have a straightforward and unambiguous semantics and do not pose any insurmountable problem for their implementation.
+
+Sometimes for example the direction of the dependency between two signals depends on the source that triggered the update: a dependency may go in one direction when the update is triggered by a change in the value of the inputs, and in the opposite one when triggered by a timer.
+
+In other cases we have to deal with circular dependencies ({{s1 -> s2 -> s3 -> s1}}) that are nonetheless fine, because it can be easily proved that the loop would stop after a single step.
+
+So in the future the compiler will start to accept some types of cyclical dependencies whose semantics is clear and does not lead to any unexpected or problematic behavior. Note that no additional syntax will be needed here: reactive automata with cyclical dependencies can be already be written, they're just rejected by the compiler that doesn't know how to implement them.
+
+
+Better support for persistence
+
+Reactive automata at the moment fully support orthogonal persistence only when they contained no temporal rules. Time-aware automata on the other hand contain hidden state in the form of timers that is currently not saved during the serialization process, which causes all temporal rules to be "reset" when the the automaton is deserialized. There's no particular reason for this limitation (it's just work that hasn't been done yet), and that will be fixed in the future.
+
+Still, persistence for reactive automata is a somewhat problematic feature. The main difficulty caused by orthogonal persistence is that you need to be able to reuse the serialized state of old versions of a software system with the new one: code changes all the time, but data stays. So it helps a lot to minimize the number of changes in the data structures that encode the state of the system. Unfortunately, reactive automata tends to have a very unstable state, in the sense that its structure may change in response to even minor refactorings of the code. In one example we discussed earlier, for instance, we refactored {{MineController}} by replacing the following lines of code:
+
+  state:
+    needs_draining : Bool = upper_sensor_submerged;
+
+  rules:
+    needs_draining = true  when upper_sensor_submerged;
+    needs_draining = false when not lower_sensor_submerged and
+                                not upper_sensor_submerged;
+
+with:
+
+  rules:
+    draining_switch = Switch(
+      switch_on  = upper_sensor_submerged,
+      switch_off = not lower_sensor_submerged and
+                   not upper_sensor_submerged
+    );
+    needs_draining = draining_switch.is_on;
+
+This innocent-looking change, that didn't alter the logical functionalities of {{MineController}} in any way, caused a change in the structure of its persistent state, by replacing the state variable {{needs_draining}} with {{draining_switch.is_on}} and turning {{needs_draining}} into a derived signal. This is more than enough to keep you from being able to reuse the old state.
+
+Contrast that with what happens with relational automata, where schemas and code are kept strictly separate, and well-designed schemas tend to be extremely stable in the face of changes to the code. Even when schemas do change, in many cases the compiler can figure out how to automatically convert your data, and it could go even further with the help of a number of features that are not yet available but are planned.
+
+The fundamental problem here is that, just like with objects and classes in OOP, with reactive automata data structures and code are mixed together in a way that is hard to disentangle. That's bad enough in ordinary languages, but it's especially bad for a language that supports orthogonal persistence. It's also, as far as I can tell, hard to avoid with reactive programming.
+
+One possible way to deal with this problem would be giving the programmer more control over which parts of a reactive automaton's state are persisted, and also over the workings of the deserialization process. There are no clear plans on how to proceed at the moment, but something obviously needs to be done to address the problem.
+
+
+Direct updates
+
+There are often times, even with systems that are indisputably reactive in nature, when the need arises to update them in ways that don't fit well with the reactive paradigm. In the case of {{MineController}}, for example, you might need the ability to "reset" the system, in case something goes wrong. In more complex cases, you might need the ability to reset only a part of the reactive system. The result of trying to implement this type of updates in reactive automata is usually a mess. One possible solution would be to add support for direct updates similar to those used in relational automata that bypass the normal flow-based update mechanism. Here's an example:
+
+  reactive RangeSwitch {
+    input:
+      value : Int;
+
+    output:
+      on      : Bool;
+      counter : Int;
+
+    state:
+      on      : Bool = value > max_value;
+      counter : Int = 0;
+
+    rules:
+      on = true  when value > max_value;
+      on = false when value < min_value;
+
+      counter = counter + 1 : on;
+  }
+
+The state variable {{on}} is set to true when the input {{value}} exceeds a certain range, and to false when it drops below it. {{counter}} on the other hand is incremented every time {{on}} changes. Let's say we want to implement a reset operation, using a syntax similar to the one used with relational automata:
+
+  RangeSwitch.reset {
+    on = value > max_value;
+    counter = 0;
+  }
+
+Both {{on}} and {{counter}} here are updated directly, ignoring the reactive update rules. Let's now implement a partial reset operation, one that resets {{on}} but not {{counter}}:
+
+  RangeSwitch.partial_reset {
+    on = value > max_value;
+  }
+
+The value of {{on}} is set directly, and if the new value is different from the old one, {{counter}} is updated as well using the {{counter = counter + 1 : state}} rule. This is a sort of "mixed" update: part of the state of the system is updated directly, and another part using the reactive logic.
+
+There's a problem with this approach, though. To illustrate it, let's implement a bizarre update operation (one that doesn't make any sense in this context of course, but which illustrates a problem that comes up naturally in more complex systems) that resets {{on}} and doubles the value of {{counter}}:
+
+  RangeSwitch.reset_and_double {
+    on = value > max_value;
+    counter = 2 * counter;
+  }
+
+Unlike in {{reset}}, here the new value of {{counter}} depends on the previous one. If we start with {{value < max_value}}, {{on == true}} and {{counter == 1}}, what should be the value of {{counter}} after the execution of {{reset_and_decrement}}, {{2}}, {{3}} or {{4}}? Since the value of {{on}} goes from true to false, according to the reactive logic {{counter}} should be incremented. Should we apply both the increment and the doubling, or just the doubling? And if we apply both, in what order should we do it? Each of the three possible semantics would lead to a different result:
+
+  1 -> 2        // Ignoring reactive logic
+  1 -> 2 -> 4   // Applying reactive logic before direct assignment
+  1 -> 2 -> 3   // Executing direct assignment before reactive logic
+
+Generally speaking, none of the three possible semantics seem to be acceptable in all circumstances. Each of them may work in some situations but to lead to unexpected and buggy behavior in others.
+
+The most obvious solution to this problem is to simply reject direct updates if their semantics is inherently ambiguous, or if they can lead to unexpected behavior. Even with such constraints, direct updates would substantially increase the number of systems that can be modeled by reactive automata, and enable a clear separation between the reactive logic and the unusual, out-of-the-ordinary cases when the standard flow of control has to be bypassed.
+
+
+More powerful temporal logic
+
+  ## TODO
+
+
+Anonymous derived automata
+
+  ## TODO
+
+
+Discrete polymorphic signals
+
+  ## TODO

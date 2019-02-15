@@ -25,7 +25,7 @@ The normal way to mutate the state of an automaton is to send it a message. For 
   }
 
   Counter.reset(Int) {
-    set value = untag(self);
+    set value = untag(this);
     set updates = updates + 1;
   }
 
@@ -51,14 +51,14 @@ or more simply like this:
     set updates = updates + 1;
   }
 
-but in the latter case you're allowed to ommit the {{<}} and {{>}} symbols, if the type between them is not a union type. In order to access the value of the message you need to use the keyword {{self}}, as demonstrated in the last handler, {{Counter.reset(Int)}}. Note that the same keyword is also used in several object-oriented programming languages, but the meaning is different: in OOP it's used to refer to the target of a method (that is, the object that "receives the message") while here it's used to refer to the message itself. There's no way in this context to refer to (the value of) the automaton instance that receives the message (only its individual fields can be accessed), because that value cannot be aliased as we explained in the previous chapter.
+but in the latter case you're allowed to ommit the {{<}} and {{>}} symbols, if the type between them is not a union type. In order to access the value of the message you need to use the keyword {{this}}, as demonstrated in the last handler, {{Counter.reset(Int)}}. Note that the same keyword is also used in several object-oriented languages, but the meaning is different: in OOP it's used to refer to the target of a method (that is, the object that "receives the message") while here it's used to refer to the message itself. There's no way in this context to refer to (the value of) the automaton instance that receives the message (only its individual fields can be accessed), because that value cannot be aliased as we explained in the previous chapter.
 
 Any number of message handlers can be merged without restrictions, whenever that's convenient. The four message handlers of {{Counter}} can for example be rewritten as follow:
 
   type CounterMsg = incr, decr, reset, reset(Int);
 
   Counter.CounterMsg {
-    new_value = match (self)
+    new_value = match (this)
       incr      = value + 1,
       decr      = value - 1,
       reset     = 0,
@@ -70,7 +70,7 @@ Any number of message handlers can be merged without restrictions, whenever that
 or alternatively like this:
 
   Counter.CounterMsg {
-    set value = new_value(self);
+    set value = new_value(this);
     set updates = updates + 1;
   }
 
@@ -86,16 +86,16 @@ All three implementations are completely equivalent.
 
 In spite of a few superficial similarities, message handlers differ from methods in OOP (or even messages in the actor model) in several significant ways:
 
-** Similarily to messages in the actor model, but unlike methods in OOP, messages in Cell are just ordinary values, that can be manipulated like any other piece of data: they can be copied, passed around and stored as part of the automaton's state. It's very easy, for instance, to store and keep a record of all messages that have been received by any given automaton instance.
+** Similarily to messages in the actor model, but unlike methods in OOP, messages in Cell are just ordinary values, that can be manipulated like any other piece of data: they can be copied, passed around, sent over a network and saved to a file. It's very easy, for instance, to store and keep a record of all messages that have been received by any given automaton instance.
 ** Another similarity with the actor model is that message handlers don't return a value: there's a strict separation between commands/messages and queries/methods. Such a programming model is more reliable when writing distributed applications.
 ** Automata can only receive messages, not send them, even to themselves. There's no such thing as "message passing" between automata. That's by design and it's never going to change: automata are meant to be self-contained entities, oblivious to the world around them, the only exception being other automata they're wired to, which are read-only to them anyway. Any inter-automata update logic there is, it has to go somewhere else. For the time being, that typically means it has to be dealt with in the host language, not in Cell. The only exception to this is nested automata, which are not regarded as indipendent entities but only as a part of their parent, which is therefore allowed to send messages to them.
-** The scope of the side effects caused by a message handler is limited to the automaton instance that received the message. The state of other automata is not affected, and that includes both dependees and dependants of the target of the message.
-** All update instructions that are issued as part of the execution of a message handler do not take effect immediately. Instead, they are retained and applied only when the message handler returns, which means that during the entire execution of the latter the state of the automaton doesn't change at all. Not only that, but also the specific order in which those commands are issued is ignored. This is a major difference, that completely changes the way you have to write and think about update code. It comes with a long list of trade-offs, and it certainly puts an extra burden on the developer. I believe the advantages outweigh the disadvantages, but the latter are very substantial. We'll discuss all the trade-offs in detail later.
+** The scope of the side effects caused by a message handler is limited to the automaton instance that received the message. The state of other automata is not affected, and that includes both dependees and dependants of the automaton that receives the message.
+** All update instructions that are issued as part of the execution of a message handler do not take effect immediately. Instead, they are retained and applied only when the message handler returns, which means that during the entire execution of the latter the state of the automaton doesn't change at all. Not only that, but also the specific order in which those commands are issued is ignored. This is a major difference, that completely changes the way you have to write and think about update code. It comes with a long list of trade-offs, and it certainly puts an extra burden on the developer. I believe the advantages outweigh the disadvantages, but the latter are substantial. We'll discuss all the trade-offs in detail later.
 
 
 Atomic update instructions
 
-We've already seen our first atomic update instruction, the {{set}} statement, which simply sets the value of a member variable. It can be used only with ordinary variables, and not with mutable relation variables or nested automata. The most important thing to notice here is that any member given variable can be assigned only once during the execution of the message handler: trying to set the same variable twice would cause the message handler to fail. That's because, as explained above, the order in which assignments are issued is ignored, and therefore there's no way to decide which of two (conflicting) assignments targeting the same member variable should actually be executed.
+We've already seen our first atomic update instruction, the {{set}} statement, which simply sets the value of a member variable. It can be used only with ordinary variables, and not with mutable relation variables or nested automata. The most important thing to notice here is that any given member variable can be assigned only once during the execution of the message handler: trying to set the same variable twice would cause the message handler to fail. That's because, as explained above, the order in which assignments are issued is ignored, and therefore there's no way to decide which of two (conflicting) assignments targeting the same member variable should actually be executed.
 
 In order to update mutable relation variables the language provides two commands, {{insert}} and {{delete}}. To illustrate them, we'll make use of some of the automata we defined in the previous chapter. Here's our first example:
 
@@ -105,30 +105,30 @@ In order to update mutable relation variables the language provides two commands
   }
 
   Logins.login(user_id: Nat, name: String) {
-    // Inserting the entry {{self.user_id, self.name}} into {{usernames}}
+    // Inserting the entry {{this.user_id, this.name}} into {{usernames}}
     // No effect if {{usernames}} already contains such an entry
     // Fails if a (different) entry with the same left argument or
     // the same right argument (but not both) already exists, since
     // that would violate the integrity constraints of {{usernames}}
-    insert usernames(self.user_id, self.name);
+    insert usernames(this.user_id, this.name);
   }
 
   Logins.logout(user_id: Nat) {
-    // Deleting all entries whose left field equals {{self.user_id}}
+    // Deleting all entries whose left field equals {{this.user_id}}
     // from both {{usernames}} and {{memberships}}
-    delete usernames(self.user_id, *), memberships(self.user_id, *);
+    delete usernames(this.user_id, *), memberships(this.user_id, *);
   }
 
   Logins.join_room(user_id: Nat, room: String) {
-    // Inserting the entry {{self.user_id, self.room}} into {{memberships}}
+    // Inserting the entry {{this.user_id, this.room}} into {{memberships}}
     // No effect if {{memberships}} already contains such an entry
-    insert memberships(self.user_id, self.room);
+    insert memberships(this.user_id, this.room);
   }
 
   Logins.leave_room(user_id: Nat, room: String) {
-    // Deleting the entry {{self.user_id, self.room}} from {{memberships}},
+    // Deleting the entry {{this.user_id, this.room}} from {{memberships}},
     // if such entry exists, no effect otherwise
-    delete memberships(self.user_id, self.room);
+    delete memberships(this.user_id, this.room);
   }
 
   Logins.clear {
@@ -136,7 +136,7 @@ In order to update mutable relation variables the language provides two commands
     delete usernames(*, *), memberships(*, *);
   }
 
-Both commands offer a bit of syntactic sugar, that allows you to merge several commands into a single one: {{insert relvar1(x1, y1);}} and {{insert relvar2(x2, y2);}} can be combined, with no difference in meaning, into {{insert relvar1(x1, y1), relvar2(x2, y2);}}. When deleting entries you can also use wildcard arguments, as demonstrated in {{Logins.join_room(..)}} and {{Logins.clear}}. The above examples all use binary relation variables, but it all works in the same way for unary and ternary ones, just with one or three arguments respectively instead of two.
+For both updates and deletes you can merge several commands into a single one: {{insert relvar1(x1, y1);}} and {{insert relvar2(x2, y2);}} can be combined, with no difference in meaning, into {{insert relvar1(x1, y1), relvar2(x2, y2);}}. When deleting entries you can also use wildcard arguments, as demonstrated in {{Logins.logout(..)}} and {{Logins.clear}}. The above examples all use binary relation variables, but it all works in the same way for unary and ternary ones, just with one or three arguments respectively instead of two.
 
 The {{insert}} command comes in two flavors. The standard version is the one shown in the above example: it fails when inserting an entry that would violate the integrity constraints that apply to the target relation variable. The second form is a sort of "forced insert": if the relation contains entries that are key-incompatible with the entry that is being inserted the former are simply deleted. The only syntactic difference is that it requires the {{update}} keyword instead of {{insert}}. A command of the form:
 
@@ -151,19 +151,19 @@ is (in the specific case of {{usernames}}, which has a key on both columns) equi
 For relations that have no keys, like {{memberships}}, the two forms are completely equivalent. The {{update}} form is convenient when updating the values of the attributes of an existing entity or relationship (hence its name): this is, for instance, how you would update the value of the {{address}} attribute for a specific supplier in the {{Supply}} automaton defined in the previous chapter:
 
   Supply.set_address(supplier_id: SupplierId, new_address: String) {
-    update address(self.supplier_id, self.new_address);
+    update address(this.supplier_id, this.new_address);
     // The above statement is equivalent to:
-    // delete address(self.supplier_id, *);
-    // insert address(self.supplier_id, self.new_address);
+    // delete address(this.supplier_id, *);
+    // insert address(this.supplier_id, this.new_address);
   }
 
 or the price charged by a specific supplier for a specific part:
 
   Supply.set_price(suppl_id: SupplierId, part_id: PartId, price: Money) {
-    update unit_price(self.suppl_id, self.part_id, self.price);
+    update unit_price(this.suppl_id, this.part_id, this.price);
     // The above statement is equivalent to:
-    // delete unit_price(self.suppl_id, self.part_id, *);
-    // insert unit_price(self.suppl_id, self.part_id, self.price);
+    // delete unit_price(this.suppl_id, this.part_id, *);
+    // insert unit_price(this.suppl_id, this.part_id, this.price);
   }
 
 Just like it happens with the {{set}} instruction, the order in which inserts, updates and deletes are issued is ignored, so you have to take care not to issue conflicting commands. These update handlers, for instance, will fail:
@@ -191,9 +191,109 @@ Inserting the exact same entry twice will always succeed though, because duplica
     insert usernames(10, "sarah");
   }
 
-For the time being when deleting an entity or a relationship from a dataset you'll have to explicitly delete all of its attributes stored in ancillary relations. That's of course boring and error prone, and it will be fixed in a future release, as part of the implementation of foreign keys. Also note that until the latter are implemented, you have to be careful, when creating a new entity or relationship, to also insert all of its attributes into their corresponding relations: neither the compiler nor the runtime will be able to catch the error if you forget to provide a mandatory attribute. A future version of the language will also provide some syntactic sugar for the insertion of data into attribute relations.
-
 Once the message handler returns and all inserts and deletes take effect, the order in which these commands are issued is irrelevant but, conceptually at least, all deletes are applied before the inserts. Updates commands are just treated as a combination of deletes and inserts.
+
+
+Inserting attributes
+
+When inserting an entity or a relationship from a dataset you'll generally have to also insert attributes stored in ancillary relations. That tends to be rather very verbose, so the language provides some syntactic sugar here. If you have a set of mutable relation variables like the following ones:
+
+  schema Users {
+    user(UserId):
+      name            : String, // Mandatory
+      date_of_birth?  : Date,   // Optional
+      phone_number+   : String; // One or more values
+
+    ...
+  }
+
+Here's how you can write a message handlers that inserts a new user and all its attributes:
+
+  User.add_user(id: UserId, name: String, date: Date, phone: String) {
+    insert user(this.id):
+      name          = this.name,
+      date_of_birth = this.date,
+      phone_number  = this.phone;
+  }
+
+It's completely equivalent to the following, more verbose version:
+
+  User.add_user(id: UserId, name: String, date: Date, phone: String) {
+    insert user(this.id);
+    insert name(this.id, this.name);
+    insert date_of_birth(this.id, this.date);
+    insert phone(this.id, this.phone);
+  }
+
+Here's another, more complex example:
+
+  User.add_user(id: UserId, name: String, date: Date?, phones: [+String]) {
+    insert user(this.id):
+      name          = this.name,
+      date_of_birth = this.date if this.date?,
+      phone_number  = p : p <- this.phones;
+  }
+
+which is equivalent to:
+
+  User.add_user(id: UserId, name: String, date: Date?, phones: [+String]) {
+    insert user(this.id);
+    insert name(this.id, this.name);
+    if this.date?:
+      insert date_of_birth(this.id, this.date);
+    ;
+    for p <- this.phones:
+      insert phone(this.id, p);
+    ;
+  }
+
+Whenever you insert a new entity or relationship in the dataset, the compiler checks that you're also inserting all its mandatory attributes. More specifically, whenever you define, either implicitly or explicitly, a foreign key like this:
+
+  unary_rel(x) -> binary_rel(x, _);
+
+the compilers expects you to follow up any insertion into {{unary_rel}} with a corresponding one in {{binary_rel}}, and for a foreign key of the type:
+
+  binary_rel(x, y) -> ternary_rel(x, y, _);
+
+it expects any insertion into {{binary_rel}} to be followed by at least one insertion into {{ternary_rel}}. In both cases it makes sure that you're inserting exactly one value for (mandatory) single-valued attributes, and at least one for (mandatory) multi-valued ones.
+
+
+Cascade deletes
+
+Just like for insertions, there's some syntactic sugar for deletions as well. Using the {{Users}} schema defined above, the following message handler:
+
+  Users.delete_user(id: UserId) {
+    delete user(this.id);
+  }
+
+not only deletes that particular id from {{user}}, but also deletes all its corresponding entries in the attribute relations. In other words, the compiler rewrites the body of {{delete_user()}} like so:
+
+  Users.delete_user(id: UserId) {
+    delete user(this.id);
+    delete name(this.id, *);
+    delete date_of_birth(this.id, *);
+    delete phone_number(this.id, *);
+  }
+
+Note, though, that only the attributes that are defined using the syntactic sugar are deleted automatically. If {{Users}} had been defined as follows, without any syntactic sugar:
+
+  schema Users {
+    user(UserId);
+    user(u) -> name(u, _), phone_number(u, _);
+
+    name(UserId, String) [key: 0];
+    name(u, _) -> user(u);
+
+    date_of_birth(UserId, Date) [key: 0];
+    date_of_birth(u, _) -> user(u);
+
+    phone_number(UserId, String);
+    phone_number(u, _) -> user(u);
+
+    ...
+  }
+
+you would have had to explicitly delete all the data from the attribute relations as well.
 
 
 Mutator methods
@@ -208,12 +308,13 @@ Message handlers have no way to invoke one another (or to put it another way, au
     update_value(value - 1);
   }
 
+
   Counter.reset {
     update_value(0);
   }
 
   Counter.reset(Int) {
-    update_value(untag(self));
+    update_value(untag(this));
   }
 
   using Counter {
@@ -245,10 +346,10 @@ As already explained, automata are passive entities that can only receive but no
   }
 
   CounterPair.update_counter(id: <0..1>, msg: CounterMsg) {
-    if self.id == 0:
-      counter_1 <- self.msg;
+    if this.id == 0:
+      counter_1 <- this.msg;
     else
-      counter_2 <- self.msg;
+      counter_2 <- this.msg;
     ;
   }
 
@@ -299,7 +400,7 @@ but it doesn't in Cell. The problem lies in the way {{level_up()}} and {{top_up_
 
 The choice of such an execution model is probably the most puzzling design decision in the entire language since it makes update code more difficult to write, it adversely affects its modularity, and was not, in any way, dictated by other features of the language. But in spite of its issues, it also has a couple of important advantages.
 
-One major problem with imperative code is that it doesn't lend itself to parallel execution: it's notoriously difficult to write concurrent imperative programs, and even more so for a compiler to (semi-)automatically and safely parallelize the execution of existing code. One much hyped advantage of pure functional programming on the other hand is that it is very well suited to parallel execution: since functions are referentially transparent and have no side effects, two function calls can always be executed in parallel, as long as neither depends on the other's result. And in spite of their imperative syntax, message handlers in Cell are, in fact, pure functions: the only thing that's different about them (apart from the syntax) is the fact that instead of explicitly returning an ordinary value they implicitly return a set of {{set}}/{{insert}}/{{delete}} commands that are then checked and executed by some compiler-generated code. Both the execution of the message handler and the subsequent checking and execution of the resulting commands can potentially be made to take advantage of multi-core processors safely and with little effort on the programmer's part. That's in addition to the potential inter-automata parallelism: since automata cannot share any mutable state (thanks to the combination of immutability for some data structures and the impossibility of aliasing for others) they can potentially be safely updated concurrently, unless they are nested inside one another or in a dependant/dependee relationship. Now, just to be clear, what we're talking about here is just leaving the door open for a future implementation to take advantage of parallelism: currently there's no support for concurrency at all, and a fully parallel implementation is going to be a long-term effort.
+One major problem with imperative code is that it doesn't lend itself to parallel execution: it's notoriously difficult to write concurrent imperative programs, and even more so for a compiler to (semi-)automatically and safely parallelize the execution of existing code. One much hyped advantage of pure functional programming on the other hand is that it is very well suited to parallel execution: since functions are referentially transparent and have no side effects, two function calls can always be executed in parallel, as long as neither depends on the other's result. And in spite of their imperative syntax, message handlers in Cell are, in fact, pure functions: the only thing that's different about them (apart from the syntax) is the fact that instead of explicitly returning an ordinary value they implicitly return a set of {{set}}/{{insert}}/{{update}}/{{delete}} commands that are then checked and executed by some compiler-generated code. Both the execution of the message handler and the subsequent checking and execution of the resulting commands can potentially be made to take advantage of multi-core processors safely and with little effort on the programmer's part. That's in addition to the potential inter-automata parallelism: since automata cannot share any mutable state (thanks to the combination of immutability for some data structures and the impossibility of aliasing for others) they can potentially be safely updated concurrently, unless they are nested inside one another or in a dependant/dependee relationship. Now, just to be clear, what we're talking about here is just leaving the door open for a future implementation to take advantage of parallelism: currently there's no support for concurrency at all, and a fully parallel implementation is going to be a long-term effort.
 
 Another problem is that the execution model of imperative languages, while undoubtedly convenient in simple cases like the example shown above, leads to nasty spaghetti code when programming in the large. Even in a moderately complex real world application, an update may well involve mutating the data structures that encode the state of the application in hundreds of different places. The goal of an update is to transition those data structures from the state they have before the update to the one they're supposed to have when the update is complete. But in order to do so they have to go through many different intermediate states each of which is the result of applying an atomic update to the previous one, and it's also common for specific pieces of information to be mutated several times during a single global update. The vast majority of those partially updated states are inconsistent, since they're by definition the result of updating only a part of the target data structures. But all those intermediate states are visible to the application code, with the result that's very difficult to know, when reading the value of a particular variable, whether such a value is the initial one, the final one, or just an intermediate one. The correctness of the code is highly dependendent on the order in which side effects are carried out, but such order is very difficult to control when updating a large object graph.
 

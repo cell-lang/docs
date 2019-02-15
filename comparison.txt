@@ -6,6 +6,8 @@ We're now going to re-implement the Cell code we saw in the previous chapter in 
 
 On the Java side, in order to avoid boring boilerplate code that would make the comparison less clear, we'll be only partially following one of the fundamental tenets of OOP, encapsulation. All member variables will be public, but they are intended to be read-only outside the class they belong to. Any change to the state of any object will only be carried out by methods of its class. This is similar to what happens in Cell with relational automata, whose state is visible in read-only mode to the outside world, but can be mutated only by the message handlers of the same automaton, although there are several major differences here, one of them being the fact that in Cell that's actually enforced by the language, while in Java it is left to the programmer's self-discipline.
 
+In the Java version we will also omit all constructors and a number of very simple methods, since their implementation will be obvious.
+
 
 Data structures
 
@@ -35,9 +37,9 @@ We've already seen the Cell schema for the core logic of our online forum:
     friends(UserId | UserId):
       since : Date;
 
-    admin(_, id) => user(id);
-    member(u, g) => user(u), chat_group(g);
-    friends(u1, u2) => user(u1), user(u2);
+    admin(_, id) -> user(id);
+    member(u, g) -> user(u), chat_group(g);
+    friends(u1, u2) -> user(u1), user(u2);
   }
 
 There are of course many ways to design a set of equivalent data structures in Java (unlike what happens with Cell, where there's just one obvious design), each of them with its own trade-offs, but this seems a reasonable starting point:
@@ -57,34 +59,41 @@ Updating the information in the dataset
 
 We're now going to write methods that are equivalent to the Cell message handlers. Inserting a new user or group is trivial and very similar in both languages, so we will just skip that. Instead, we'll start with the code that allows a user to join a chat group, or two users to become online friends. Here's the Cell code for that:
 
-  OnlineForum.join_group(user: UserId, group: GroupId, date: Date, rank: Int); {
-    insert member(self.person, self.gang, joined_on: self.date, rank: self.rank);
+  OnlineForum.join_group(user: UserId, group: GroupId, date: Date) {
+    insert member(this.user, this.group):
+      joined_on = this.date,
+      karma     = 0;
   }
 
   OnlineForum.add_friendship(user1: UserId, user2: UserId, since: Date) {
-    insert friends(self.user1, self.user2, since: self.since);
+    insert friends(this.user1, this.user2):
+      since = this.since;
   }
 
-In Java the same functionality is implemented by the following methods of the {{User}} and {{Group}} classes:
+In Java the same functionality is implemented by the following methods of the {{User}} and {{Group}} classes (constructors are not shown):
 
 {#{java/join-and-befriend.html}#}
 
 The Java code is slightly more complex, in the case of {{join(..)}} because the same {{Membership}} object has to be inserted in both {{User.memberships}} and {{Group.memberships}}, and in the case of {{befriend(..)}} because the same {{Friendship}} object has to be added to the {{friendships}} member variables of both parties involved. But that's not much of deal.
 
-The code that deletes data from the dataset, though, is more interesting. Here's the Cell version (it's a slightly more general version of the code we saw previously):
+Keep in mind though that in Cell all message handlers that insert an entity or a relationship and all their attributes in the dataset have a standard structure and can and will be auto-generated in a future version of the compiler, so a few months from now you won't have to write any code at all for that. That's in general not possible in OOP, because the data model is a lot messier.
+
+The code that deletes data from the dataset is more interesting. Here's the Cell version (it's a slightly more general version of the code we saw previously):
 
   OnlineForum.delete_user(id: UserId) {
-    id = self.id;
+    id = this.id;
     delete user(id), friends(id, *);
-    leave_group(id, g) : g <- member(id, ?);
+    for g <- member(id, ?):
+      leave_group(id, g);
+    ;
   }
 
   OnlineForum.delete_group(id: GroupId) {
-    delete chat_group(self.id), member(*, self.id);
+    delete chat_group(this.id), member(*, this.id);
   }
 
   OnlineForum.leave_group(user: UserId, group: GroupId) {
-    leave_group(self.user, self.group);
+    leave_group(this.user, this.group);
   }
 
   using OnlineForum {
@@ -92,7 +101,7 @@ The code that deletes data from the dataset, though, is more interesting. Here's
       delete member(user, group);
       members = [u : u <- member(?, group), u != user];
       if members != []:
-        new_admin = an_elem(max_by(members, karma($, group)));
+        new_admin = any(max_by(members, karma($, group)));
         update admin(group, new_admin);
       else
         delete chat_group(group);
@@ -131,17 +140,17 @@ This is one way to implement it, using the {{Multimap}} class in Google's Guava 
 
 The {{usersWhoSignedUpOn(..)}} method and the {{usersBySignupDate}} member variable are new, while {{add(..)}} and {{remove(..)}} were already there, but had to be modified to support the new functionality (The {{add(...)}} methods was not shown before, as it was a trivial one-liner).
 
-Here the changes to the Java code are trivial, but that still has to be repeated for each type of search for which efficiency is a concern, and there's always the possibility that one might miss some of the locations in one's code that need to be updated. With the relational model, on the other hand, you get efficient searches for free.
+Here the changes to the Java code are pretty simple, but that still has to be repeated for each type of search for which efficiency is a concern, and there's always the possibility that one might miss some of the locations in one's code that need to be updated. With the relational model, on the other hand, you get efficient searches for free.
 
 
 Conclusions
 
 There's obviously only so much that can be gathered from a toy example like this, but some of the issues that affect code written in a low-level programming paradigm like OOP should already be discernible:
 
-** Data structures are significantly more complex than they should be, and contain a lot of redundancy
+** Data structures are significantly more complex than they should be, and contain a lot of noise/redundancy that cannot be removed without compromising their usability and performance.
 ** Code that updates those same data structures ends up being longer and more difficult to write, mainly because of data redundancy
 ** Redundancy and the lack of declarative integrity constraints make it way, way easier to have bugs that lead to an inconsistent and invalid application state
 ** There's a nontrivial amount of effort that has to be spent writing and maintaining code that wires the object graph and creates and updates the extra data structures that are needed to efficiently search your data. Using relations makes those issues disappear
 ** None of the above problems are specific to Java: instead, they affect any programming language that uses records and pointers in its data model, and that includes all object-oriented languages
 
-One thing that cannot be gauged by a simplistic example like this one is the magnitude of the savings in terms of code size (and complexity) that are made possible by the use of the relational model. For that, we definitely need a bigger and more realistic example, but that will have to wait until version 0.3 of the language is out. Stay tuned.
+One thing that cannot be gauged by a simplistic example like this one is the magnitude of the savings in terms of code size (and complexity) that are made possible by the use of the relational model. For that, we definitely need a bigger and more realistic example, but you'll have to wait a few more months for that. Stay tuned.

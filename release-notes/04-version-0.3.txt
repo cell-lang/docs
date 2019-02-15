@@ -1,0 +1,21 @@
+Cell &#x279e; Java compiler version 0.3
+
+Version 0.3 of the Cell to Java code generator is now available, with a lot of new features. Here's a partial list:
+
+** Foreign keys (both implicit and explicit)
+** Compile-time checks for (some types of) foreign keys
+** Cascade deletes
+** Syntactic sugar for insertions
+** Full support for inheritance hierarchies
+** Syntactic sugar for unique attributes
+** Symmetric relations
+** Aggregate functions
+** Improved support for orthogonal persistence
+
+All the major features that are planned for version 1.0 have now been implemented. This is still a beta though, since there's a lot of new code that still needs more testing.
+
+There's also been a backward-incompatible syntactic change: the keyword {{self}}, that was used to refer to the message inside the message handler's body has been replaced with {{this}}.
+
+This version is also Java-only. The release of C++ and C# code generators has been postponed until version 0.5.
+
+The next version, 0.4, will be focused exclusively on performance optimization of relational automata and is expected to be released in May. The one after that, 0.5, will implement the last few (minor) features that are required for version 1.0, and will probably be available in July.

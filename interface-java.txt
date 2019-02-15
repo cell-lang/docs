@@ -82,25 +82,29 @@ Errors handling works in the same way as with {{setState()}}. If an error occurs
 
 The two methods {{value()}} and {{updates()}} are {{Counter}}-specific accessors that return the values of the {{value}} and {{updates}} member variables respectively. Note that the types of such variables is just {{Int}}, which can be mapped directly to {{long}} in Java, with no need to use {{net.cell_lang.Value}}.
 
+If you don't want those automatically generated methods, just use the {{-nag}} flag when running the Cell compiler.
+
 Let's now take a look at a more complex automaton, {{Supply}}. Here's the declaration of the generated Java class:
 
 {#{java/supply.html}#}
 
-The first three methods of the {{Supply}} class, {{readState()}}, {{setState(..)}} and {{execute(..)}}, are the same as before. The two methods {{nextPartId()}} and {{nextSupplierId()}} are just accessors for the corresponding member variables, just like {{value()}} and {{updates()}} in {{Counter}}. All the other methods are new, and are either accessors for some mutable relation variable or wrappers for a Cell method. A first set of boolean methods check whether a relation contains a given tuple (or value, for unary relations):
+The first three methods of the {{Supply}} class, {{readState()}}, {{setState(..)}} and {{execute(..)}}, are the same as before. The next two (both named {{lowestPriceSuppliers(..)}}) are just the compiled Java version of the corresponding Cell methods of the {{Supply}} automaton.
 
-{#{java/supply-methods-A.html}#}
+Everything else is just automatically generated accessors for the data stored by the automaton. Again, if don't want them just use the {{-nag}} option when compiling.
 
-A second group of methods, like {{supplier()}} or {{unitPrice()}}, return the entire content of a given relations. In the case of unary relation they return an array of values corresponding to the elements of the relations. In the case of binary or ternary relations they return an object of type {{net.cell_lang.Pair}} and {{net.cell_lang.Triplet}} respectively, that contain the columns of the relations. The {{Pair}} and {{Triplet}} types are defined as follow:
+The two methods {{nextPartId()}} and {{nextSupplierId()}} are just accessors for the corresponding member variables, just like {{value()}} and {{updates()}} in {{Counter}}.
 
-{#{java/pair-triplet.html}#}
-
-It would be of course nicer to return an array of tuples, rather than a pair/triplet of arrays, and that's how it is in other languages, but given the restrictions of Java's type system this is probably the simplest and most efficient way to do it.
-
-Binary relations with a key on the first column (that is, maps) also have accessors that return the value corresponding to a given key, provided that the relation/map contains such key:
+The next set of methods all take as argument the id of an entity and return the value of the corresponding attribute. They're defined only for single-valued attributes:
 
 {#{java/supply-methods-B.html}#}
 
-The last group of methods ({{lowestPriceSuppliers(..)}}) are just the compiled Java version of the corresponding Cell methods of the {{Supply}} automaton.
+Similar accessors are available also for the attributes of relationships. Then we have a group of boolean methods that check whether a relation contains a given tuple (or value, for unary relations):
+
+{#{java/supply-methods-A.html}#}
+
+The last group of methods simply returns the entire content of a given relations. The definitions of their return types are not shown here, but you'll find them in the {{interface.txt}} file.
+
+Automatically generated methods are still a work in progress at the moment: some of those that are there are probably of dubious value, and others that are probably useful are not there yet. At some point in the future the compiler will not only choose what to generate more wisely, but will also provide the developer with a way to control the generation process.
 
 
 Reactive automata

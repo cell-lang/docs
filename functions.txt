@@ -398,7 +398,7 @@ When specifying the order of evaluation in complex expressions, you can use eith
   x * (y + z)
   x * {y + z}
 
-but while braces can be used in any context, the use of parentheses is restricted, because parenthesized expressions are inherently ambiguous: an expression of the form {{(y + z)}} could be interpreted as either a one-element sequence containing the value {{y + z}}, or just the parenthesized form of {{y + z}}. So how does the compiler resolve the ambiguity? The rule is very simple: parentheses are used for grouping if and only if they appears as an argument to one of the binary operators {{+}}, {{-}}, {{*}}, {{/}}, {{&}}, {{^}} or the unary {{-}}, and if the expression they enclose is also an invocation of one of the above binary operators. They are also used for grouping in boolean expressions, with the {{and}}, {{or}} and {{not}} operators. A few examples can help clarify this. In the following examples parentheses are used for grouping:
+but while braces can be used in any context, the use of parentheses is restricted, because parenthesized expressions are inherently ambiguous: an expression of the form {{(y + z)}} could be interpreted as either a one-element sequence containing the value {{y + z}}, or just the parenthesized form of {{y + z}}. So how does the compiler resolve the ambiguity? The rule is very simple: parentheses are used for grouping if and only if they appears as an argument to one of the binary operators {{+}}, {{-}}, {{*}}, {{/}}, {{&}}, {{^}} or the unary {{-}}, and if the expression they enclose is also an invocation of one of the above binary operators. They are also used for grouping in boolean expressions, with the {{and}}, {{or}} and {{not}} operators. A few examples can help clarify this. In the following expressions parentheses are used for grouping:
 
   x * (y + z)
   -(x + y)
@@ -418,16 +418,16 @@ In all other cases, they are used to build single-element sequences:
   // Neither {{x}} nor {{f(y, z)}} are binary operator invocations
   (x) & (f(y, z))
 
-The above rules cover most of the cases in which you need to group expressions, but you may sometimes still have to use braces for grouping. An example:
+The above rules cover most of the cases in which you need to group expressions, but you may occasionally still have to use braces for grouping. An example:
 
-  {if c then x else y} + z
+  {if c then x else y} / z
 
 If you want to force the compiler to parse a parenthesized expression as a single-element sequence in a contexts where the parentheses would be normally used for grouping you can do so by adding a comma before the closing parenthesis:
 
   // {{str1}} and {{str2}} are strings, and {{strs}} is a sequence of strings
   (str1 & str2,) & strs
 
-These rules may seem unnecessarily complicated, and maybe they are, but in practice they seem to work just fine, with the typechecker being almost always able to catch any errors that may occur in practice.
+These rules may seem unnecessarily complicated, and maybe they are, but in practice they seem to work just fine, with the typechecker being almost invariably able to catch any errors that may occur in practice.
 
 
 Closures
@@ -536,7 +536,7 @@ Patterns can also be nested. An example:
     rect(
       point(x1?, y1?),
       point(x2?, y2?)
-    ) = abs({x1 - x2} * {y1 - y2});
+    ) = abs((x1 - x2) * (y1 - y2));
 
 You can also break up a value according to a pattern, and still bind the entire value to a variable, like the following function does: it binds both elements of {{ps}} to a variable, {{p1}} and {{p2}} respectively, and then further breaks up each of them in turn, finally binding the values {{x1}}, {{y1}}, {{x2}}, {{y2}}.
 

@@ -1,0 +1,151 @@
+Aggregate functions
+
+Using this schema:
+
+  schema Market {
+    product(ProductId):
+      description : String;
+
+    customer(CustomerId):
+      name : String;
+
+    purchase(PurchaseId):
+      item    : ProductId,
+      buyer   : CustomerId,
+      amount  : Int,
+      date    : Date;
+  }
+
+let's say we want to calculate the total amount of items sold on a given date. One way to go about it would be this:
+
+  using Market {
+    Int total(Date date) {
+      total = 0;
+      for p <- date(?, this.date):
+        total = total + amount(p);
+      ;
+      return total;
+    }
+  }
+
+While this would work, it's not a satisfactory way to do it. The above method computes the sum of a number of values: it would be a lot better to be able to write a {{sum(..)}} function once and for all, and use it in the implementation of {{total(..)}}. But implementing {{sum(..)}} as an ordinary function, as shown here:
+
+  ## BUG: THIS CODE DOESN'T WORK
+
+  Int sum([Int] xs) {
+    s = 0;
+    for x <- xs:
+      s = s + x;
+    ;
+    return s;
+  }
+
+  using Market {
+    Int total(Date date) = sum([amount(p) : p <- date(?, this.date)]);
+  }
+
+would not work. The problem here is that the expression
+
+  [amount(p) : p <- date(?, this.date)]
+
+builds a set, and sets don't retain duplicates. If two purchases have the same value for the {{amount}} attribute one of them will be eliminated, and the result would be completely wrong. In order to make that work, you need to define {{sum(..)}} as an aggregate function:
+
+  Int sum(Int.. x)
+    Int s = x : s1 s2 -> s1 + s2;
+    return 0 | s;
+
+  using Market {
+    Int total(Date d) = sum(amount(p) : p <- date(?, d));
+  }
+
+The type of the first argument of an aggregate function is the type of the values it aggregates: in this specific case, the type of the values it adds together. It's followed by a couple dots, which indicate that such argument is not a standard one. Just like ordinary functions, aggregate ones can have any number of arguments, but only the first one is treated specially. The body of an aggregate function is composed of one or more aggregate variable definitions (just {{s}} in this case) and a weird return statement at the end.
+
+The first step in the evaluation of an aggregate function call is the evaluation of its aggregate variables. Let's say the numbers we want to add are {{4 5 2 9}}. Here's a graphical depiction of the how {{s}} is calculated:
+
+{#{sum-eval.svg}#}
+
+The definition of an aggregate variable consists of two parts: an initialization expression between the {{=}} and {{:}} signs (just {{x}} in this case) and a reduction rule after the column: {{s1 s2 -> s1 + s2}}. First the initialization expression is evaluated for each input elements. Then the resulting values are repeatedly merged pairwise using the reduction rule until there's only one left.
+
+Once all aggregate variables have been evaluated, the second expression after the return statement (the one to the right of the {{|}} sign, {{s}} in this case) is evaluated and its value returned. If the number of input values is zero, the process that evaluates the aggregate variables is not defined, so the first expression after the return ({{0}} in this case) is the one that defines the return value.
+
+Let's go through a number of examples. {{count(..)}} just returns the number of input values:
+
+  Int count(Any.. x)
+    Int c = 1 : c1 c2 -> c1 + c2;
+    return 0 | c;
+
+Here's the evaluation process of the aggregate variable {{c}}:
+
+{#{count-eval.svg}#}
+
+Incidentally, note that usually the size operator {{|..|}} (which can be applied to both mutable relation variables and their subsets as we've already seen in a previous chapter) is a much faster alternative to {{count(..)}}, since in most cases it can produce its result in constant time.
+
+{{prod(..)}} calculates the product of all its inputs, and returns {{1}} (the identity element of multiplication) if there are none:
+
+  Int prod(Int.. x)
+    Int p = x : p1 p2 -> p1 * p2;
+    return 1 | p;
+
+{#{prod-eval.svg}#}
+
+{{norm(..)}} calculates the L2 norm (that is, the square root of the sum of the squares) of a collection of floating point numbers:
+
+  Float norm(Float.. x)
+    Float s = x * x : s1 s2 -> s1 + s2;
+    return 0.0 | sqrt(s);
+
+{#{norm-eval.svg}#}
+
+An aggregate function can make use of more than one aggregate variables. Here's one way to define a function that calculates the average of its inputs, which is not defined for empty collections:
+
+  Maybe[Float] avg(Float.. x)
+    Float s = x : s1 s2 -> s1 + s2;
+    Int   c = 1 : c1 c2 -> c1 + c2;
+    return nothing | just(s / c);
+
+There can be other arguments, in addition to the "special" one. Here's another version of {{avg(..)}} that takes a "default" value to return when there are zero inputs:
+
+  Float avg(Float.. x, Float avg0)
+    Float s = x : s1 s2 -> s1 + s2;
+    Int   c = 1 : c1 c2 -> c1 + c2;
+    return avg0 | s / c;
+
+Aggregate functions can also be polymorphic, but it must be possible to figure out at compile time which instance to call: there's no dynamic dispatch. Here's an example, the {{sum(..)}} function for integers and floating point numbers:
+
+  Int sum(Int.. x)
+    Int s = x : s1 s2 -> s1 + s2;
+    return 0 | s;
+
+  Float sum(Float.. x)
+    Float s = x : s1 s2 -> s1 + s2;
+    return 0.0 | s;
+
+Aggregate functions cannot have type parameters, and their arguments have to be ordinary values and not closures.
+
+
+Using aggregate functions
+
+We've already seen an example of how to call aggregate functions:
+
+  using Market {
+    Int total(Date d) = sum(amount(p) : p <- date(?, d));
+  }
+
+The values that {{sum(..)}} has to add together are defined by a pseudo-expression that is syntactically similar to a set comprehension expression, but it's not enclosed by brackets, and it can only iterate over a single mutable relation variable (you cannot use aggregate function with ordinary set or relation values). Unlike what happens with sets though, in this case duplicates are not eliminated. You can also add a single filter: here's how you would calculate the total amount of items purchased on a given date with orders of at least {{n}} items:
+
+  using Market {
+    Int total(Date d, Int n) =
+      sum(amount(p) : p <- date(?, d) if amount(p) >= n);
+  }
+
+
+Nondeterminism, again
+
+We saw in the previous chapter that when iterating through a mutable relation variable the compiler cannot (yet?) make any guarantee about the iteration order, which may cause methods to become nondeterministic. The same problem arises here: there's no guarantee whatsoever on the order the reduction operations are performed in, so if you want an aggregate function to be deterministic you must make sure the merge operation is both commutative and associative. Depending on the needs of your application, sometimes it may be acceptable to lower the bar a bit, as is often the case with some non-associative floating point operations. The floating point version of {{sum(..)}} defined above, for example, is not entirely deterministic because floating point addition is not entirely associative, but in practice you won't have much of a choice there.
+
+We've already explained why striving for full determinism is so important when programming in Cell, and how many major features of the language actually depend on it, so we won't repeat it here, except to remind you of its importance.
+
+
+Future query language
+
+Aggregate functions are at the moment just a more convenient way to implement logic that could otherwise be implemented with only marginally more effort using a loop, and their design may seem pretty bizarre, but in fact they're just a piece of larger puzzle. Aggregate functions are just the first bit of a future query language that will become a major part of Cell at some point in the future.

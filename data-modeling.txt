@@ -1,0 +1,215 @@
+Data modeling
+
+It's now time to see how typical database data is modeled in Cell, and how it differs from conventional database design. In order to do so, we'll make use of a classical example that appears in every database textbook: the suppliers/parts database. The domain we're going to model consists of two entities, suppliers and parts. Each supplier is identified internally by a unique number, and has a name, an address and a phone number. Parts too are identified internally by a unique numeric id, and have an alphanumeric code (which is also unique), and a description. Each supplier sells many different parts, and each part can be sold by any number of suppliers. Parts don't have a fixed price: instead, each supplier offers them at a different price, so the price cannot be modeled as an attribute of parts, since it depends on both the supplier and the part. We also want to keep track of how many units of a given part are available from each supplier that sells it. This is how our final schema is going to look like:
+
+  type Money = dollar_cents(Nat);
+
+  type PartId     = part_id(Nat);
+  type SupplierId = supplier_id(Nat);
+
+  schema Supply {
+    next_part_id     : Nat = 0;
+    next_supplier_id : Nat = 0;
+
+    part(PartId):
+      code        : String [unique],
+      description : String;
+
+    supplier(SupplierId):
+      name    : String,
+      address : String,
+      phone*  : String;
+
+    sells(SupplierId, PartId):
+      unit_price   : Money,
+      availability : Nat;
+
+    sells(s, p) -> supplier(s), part(p);
+  }
+
+The above schema is just a syntactic sugared version of the following one:
+
+  schema Supply {
+    // First unused numeric id for parts
+    next_part_id  : Nat = 0;
+
+    // First unused numeric id for suppliers
+    next_supplier_id : Nat = 0;
+
+    // There exists a part whose identifier is #0
+    part(PartId);
+
+    // Part #0 is identified by code #1
+    code(PartId, String) [key: 0, key: 1];
+
+    // The description of part #0 is #1
+    description(PartId, String) [key: 0];
+
+    // There exists a supplier whose identifier is #0
+    supplier(SupplierId);
+
+    // The name of supplier #0 is #1
+    name(SupplierId, String) [key: 0];
+
+    // The address of supplier #0 is #1
+    address(SupplierId, String) [key: 0];
+
+    // Supplier #0 has phone number #1
+    phone(SupplierId, String);
+
+    // Supplier #0 sells part #1
+    sells(SupplierId, PartId);
+
+    // Supplier #0 sells part #1 at price #2
+    unit_price(SupplierId, PartId, Money) [key: 0:1];
+
+    // Supplier #0 has #2 units of part #1 available
+    availability(SupplierId, PartId, Nat) [key: 0:1];
+
+    // Foreign keys
+
+    // Parts have two mandatory attributes, {{code}} and {{description}}
+    part(p) -> code(p, _), description(p, _);
+
+    // Suppliers have two mandatory attributes, {{name}} and {{address}}
+    // {{phone}} is optional
+    supplier(s) -> name(s, _), address(s, _);
+
+    // Attributes of parts must reference a valid part id,
+    // that is, one that is stored in {{part}}
+    code(p, _) -> part(p);
+    description(p, _) -> part(p);
+
+    // Attributes of suppliers must reference a valid supplier id,
+    // that is, one that is stored in {{supplier}}
+    name(s, _) -> supplier(s);
+    address(s, _) -> supplier(s);
+    phone(s, _) -> supplier(s);
+
+    // The {{sells}} relationship can only reference valid
+    // supplier and part ids
+    sells(s, p) -> supplier(s), part(p);
+
+    // {{unit_price}} and {{availability}} are mandatory
+    // attributes of {{sells}}
+    sells(s, p) -> unit_price(s, p, _), availability(s, p, _);
+
+    // For each entry in {{unit_price}} and {{availability}}
+    // there must be a corresponding entry in {{sells}}
+    unit_price(s, p, _) -> sells(s, p);
+    availability(s, p, _) -> sells(s, p);
+  }
+
+We'll start with the "unsugared" version which, as you can see, is pretty verbose (hence the need for all the syntactic sugar). The first thing to notice is the two type declarations {{PartId}} and {{SupplierId}}. In a relational database (assuming of course one chooses to use surrogates ids instead of real world identifiers) both suppliers and parts would be identified by an integer number. In Cell, on the other hand, it's better to create a specific data type for each entity in the application domain. A tagged integer is usually more than enough. Parts, for example, will in our example be identified by values like {{part_id(0)}}, {{part_id(1)}} and so on. Similarly, suppliers will be identified by values of the form {{supplier_id(N)}}. When using plain integers (or strings) as surrogate ids, any specific value may be used to identify different entities at the same time: in a database, for example, you could (and generally would) end up having a supplier and a part that share the same numeric id. User-defined identifiers like {{PartId}} and {{SupplierId}}, on the hand, provide an important advantage, when used consistently: they uniquely identify the entities in your domain. {{part_id(0)}}, for example, clearly identifies a part, and cannot be confused with {{supplier_id(0)}}, even though they both contain the number {{0}}. One important practical consequence of using "typed" identifiers is the ability to have polymorphic methods and functions: you can arrange your entity identifiers hierarchically, more or less like you would with classes in OOP, and have different implementations for the same method, each of which is specific for a certain type of entity. We'll see an example of that later.
+
+Another difference between Cell and relational databases is the fact that in Cell relations are meant to be in a fully reduced form, that is, every tuple in a relation is meant to record an atomic statement about your domain. In a relational database, for example, you would probably end up creating a {{SUPPLIERS}} table with four fields: {{NUMBER}}, {{NAME}}, {{ADDRESS}} and {{PHONE}}. In Cell, instead, that information is split between one unary relation, {{supplier}}, and three binary ones: {{name}}, {{address}} and {{phone}}.
+
+Let's start with the two unary relations (or sets), {{part}} and {{supplier}}:
+
+  // There exists a part whose identifier is #0
+  part(PartId);
+
+  // There exists a supplier whose identifier is #0
+  supplier(SupplierId);
+
+The comments above each variable explain the informal meaning of each tuple in the relation or element in the set, (with {{#0}}, {{#1}} and {{#2}} obviously being placeholders for the first, second and third element in the tuple respectively): if for example {{supplier}} contains the value {{supplier_id(10)}} that simply means that there exists a supplier identified by such a value. That may seem pretty pointess (and redundant) at first, but this type of relations will form the basis for many types of integrity constraints. They can also be convenient in a number of situations, for example when iterating through all entities of a given type.
+
+Unary relations can also be used to encode boolean attributes. If for instance we wanted to tag all parts that are out of production (instead of deleting them altogether from the database) we could define the following relation:
+
+  // Part #0 is out of production
+  out_of_prod(PartId)
+
+The binary relations {{description}}, {{name}} and {{address}} store single-valued, mandatory attributes of either parts or suppliers. They are made single-valued by the key placed on their first column ({{[key: 0]}}), and mandatory by the following foreign keys:
+
+  part(p) -> description(p, _);
+  supplier(s) -> name(s, _), address(s, _);
+
+Another set of foreign keys guarantee that the dataset cannot contain an attribute if the corresponding entity does not exist:
+
+  description(p, _) -> part(p);
+  name(s, _) -> supplier(s);
+  address(s, _) -> supplier(s);
+
+{{code}} stores another single-valued mandatory attribute of parts. In this case though, the value in question has to be unique: no two parts can share the same code. This is done by creating another key on the second column of the relation ({{[key: 1]}}).
+
+{{phone}} differs from the other attributes in that it's neither single-valued nor mandatory. Each supplier can have any number of phone numbers, including zero. That's achieved by simply not declaring any key for it, nor any foreign keys from {{supplier}} to it. The only integrity constraint that applies to {{phone}} is:
+
+  phone(s, _) -> supplier(s);
+
+which, as before, guarantees that only valid supplier ids (that is, those that are stored in {{supplier}}) can be associated with phone numbers.
+
+The last binary relation, {{sells}}, is what in database parlance is sometimes called an associative table (or an associative entity in the E/R model). It differs from the other binary relations in that it is meant to encode a relationship between two different entities, parts and suppliers, instead of an attribute of a specific entity. Just to be clear, it's a relation like any other: the only difference lies in what it is conceptually meant to represent. It has no keys since it encodes a many-to-many relationship: a suppliers can sell any number of parts and a part can be sold by any number of suppliers.
+
+The two ternary relations {{unit_price}} and {{availability}} model what we could think of as attributes of the {{sells}} relationship. As mentioned before, neither {{unit_price}} nor {{availability}} can be thought of as attributes of either parts or suppliers, as those quantities depend on both the part and the supplier: different suppliers might sell the same part at a different price, and they will generally have different amounts of it in stock. This is the kind of information that is somewhat awkward to model with conventional programming languages, but that can be encoded very naturally using ternary relations. Both relations have a composite key that consists of the first two columns, in order to ensure that the value of both attributes is unique for each combination of supplier and part.
+
+Just as with parts, suppliers and their attributes, here too we have a number of foreign keys to enforce the fact that {{unit_price}} and {{availability}} are mandatory:
+
+  sells(s, p) -> unit_price(s, p, _), availability(s, p, _);
+
+and to ensure that they can be defined if and only if a supplier actually sells that particular part:
+
+  unit_price(s, p, _) -> sells(s, p);
+  availability(s, p, _) -> sells(s, p);
+
+
+Syntactic sugar
+
+Finally let's talk about syntactic sugar. Here's how you can declare all types of attributes for any given entity:
+
+  entity(EntityId):
+    mandatory_attribute               : Type1,
+    optional_attribute?               : Type2,
+    mandatory_multivalued_attribute+  : Type3,
+    optional_multivalued_attribute*   : Type4;
+
+A mandatory attibute is one that must have one and only one value for each instance of the entity in question; an optional one has either a single value or none; a mandatory multivalued attribute has one or more values; and an optional multivalued attribute can have any number of values, including zero. This is how the above declaration is rewritten by the compiler:
+
+  entity(EntityId);
+
+  mandatory_attribute(EntityId, Type1) [key: 0];
+  optional_attribute(EntityId, Type2)  [key: 0];
+  mandatory multivalued_attribute(EntityId, Type3);
+  optional_multivalued_attribute(EntityId, Type4);
+
+  entity(id) -> mandatory_attribute(id, _);
+  entity(id) -> mandatory_multivalued_attribute(id, _);
+
+  mandatory_attribute(id, _) -> entity(id);
+  optional_attribute(id, _) -> entity(id);
+  mandatory_multivalued_attribute(id, _) -> entity(id);
+  optional_multivalued_attribute(id, _) -> entity(id);
+
+If you want to make an attribute unique, so that no two entities can have the same value for it, just add the {{[unique]}} tag, which is compatible with all four types of attributes:
+
+  entity(EntityId):
+    unique_mandatory_attribute              : Type1 [unique],
+    unique_optional_attribute?              : Type2 [unique],
+    unique_mandatory_multivalued_attribute+ : Type3 [unique],
+    unique_optional_multivalued_attribute*  : Type4 [unique];
+
+That has the effect of adding a key on the second column of the relation that encodes the attribute. The very same syntactic sugar can be used for binary relationships:
+
+  relationship(Entity1Id, Entity2Id):
+    mandatory_attribute               : Type1,
+    optional_attribute?               : Type2,
+    mandatory_multivalued_attribute+  : Type3,
+    optional_multivalued_attribute*   : Type4;
+
+which is rewritten as:
+
+  relationship(Entity1Id, Entity2Id);
+
+  mandatory_attribute(Entity1Id, Entity2Id, Type1) [key: 0:1];
+  optional_attribute(Entity1Id, Entity2Id, Type2)  [key: 0:1];
+  mandatory_multivalued_attribute(Entity1Id, Entity2Id, Type3);
+  optional_multivalued_attribute(Entity1Id, Entity2Id, Type4);
+
+  relationship(id1, id2) -> mandatory_attribute(id1, id2);
+  relationship(id1, id2) -> mandatory_multivalued_attribute(id1, id2);
+
+  mandatory_attribute(id1, id2, _) -> relationship(id1, id2);
+  optional_attribute(id1, id2, _) -> relationship(id1, id2);
+  mandatory_multivalued_attribute(id1, id2, _) -> relationship(id1, id2);
+  optional_multivalued_attribute(id1, id2, _) -> relationship(id1, id2);
+
+The {{[unique]}} tag can be applied to relationship attributes as well, and as you would expect has the effect of adding a key on the third column of the corresponding relation.

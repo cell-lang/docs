@@ -1,0 +1,152 @@
+Creating and using reactive automata
+
+We're now going to see how reactive automata are created and used. While we will focus here on how to do that in Cell, as opposed to doing it from the host language in mixed-language applications, all the commands we're going to describe have close equivalents in the interface of the generated code.
+
+Automata of either type can only be created inside procedures and not functions. A procedure can declare any number of automaton variables, but it cannot create automata dinamically: all automaton variables are instantiated when a procedure is called, and automatically destroyed when it returns. Automaton instances are also only visible inside the procedure they're declared in and they cannot be passed to other procedures.
+
+To see how to use reactive automata, we'll write some test cases for some of the automata we defined earlier. For our first example we'll make use of {{Switch}}, which only uses continuous signals and is not time-aware:
+
+  // The first two columns are the values of the {{switch_on}}
+  // and {{switch_off}} inputs respectively, and the third one
+  // is the expected value of the {{is_on}} output, encoded as
+  // {{nothing}} if the signal is expected to be undefined, or
+  // {{just(b)}} if its value is expected to be {{b}}
+  (Bool, Bool, Maybe[Bool])* switch_test_data = (
+    (false,  false,  just(false)),
+    (true,   false,  just(true)),
+    (false,  true,   just(false)),
+    (true,   true,   nothing),
+    (true,   false,  just(true)),
+    (false,  false,  just(false))
+  );
+
+  Main(String* args) {
+    switch : Switch;
+
+    for switch_on, switch_off, exp_is_on <- switch_test_data:
+      // Setting the new values of the inputs for the next
+      // propagation step. Internal state and outputs are
+      // not affected at this stage.
+      switch.switch_on = switch_on;
+      switch.switch_off = switch_off;
+
+      // Propagation step. The values of all outputs, state
+      // variables and other internal signals is updated here.
+      done = apply switch;
+
+      // Now checking that the state of the
+      // only output is the expected one
+      if exp_is_on == nothing:
+        // Here we expect {{is_on}} to be undefined
+        if switch.is_on??:
+          Print("Error: output was supposed to be undefined\n");
+          return;
+        ;
+      else
+        // First we check {{is_on}} is defined
+        if not switch.is_on??:
+          Print("Error: output was supposed to be defined\n");
+          return;
+        ;
+        // Now we check that it has the expected value
+        if value(exp_is_on) != switch.is_on:
+          Print("Error: unexpected output value\n");
+          return;
+        ;
+      ;
+
+      Print("OK\n");
+    ;
+  }
+
+The first thing you need to do with a new automaton instance is to set the value of all its continuous inputs. A failure to set any of them will be treated as a runtime error: the input will be left in an undefined state, which will be then propagated to all other signals that depend on it. At this stage, you should not try to set any discrete inputs, as that can be done only once the automaton has been initialized.
+
+Once the inputs are set it's time to initialize the instance. That's done with the {{apply}} statement, whose parameter is the name of the automaton variable to initialize, and whose return value can be safely ignored here since it's meaningful only for time-aware automata. The same {{apply}} statement is also used both to initialize the automaton and to propagate input changes, but there are significant differences between the two operations. As explained before, in the former case all continuous derived signals are initialized, state variables are set to the value provided with their declaration but their update rules are ignored, and discrete signals are ignored as well.
+
+Once the automaton instance has been initialized, you'll be able to check the state of the outputs. You can read them using the familiar {{instance.output}} syntax, but keep in mind that trying to read the value of an undefined output will result in an exception that will terminate the program. Inside a reactive automaton you don't need to worry about that because errors are propagated automatically, but outside that particular context you need to explicitly check whether an output is defined before reading its value if you want to avoid errors. That's done using the {{instance.output??}} expression, which returns true if the output is defined or false otherwise.
+
+Once the automaton is initialized its life becomes a cycle where you update its inputs when needed, propagate those updates throughout the automaton and then check how the outputs have changed and react accordingly. Keep in mind that just setting the values of the inputs does not trigger the update propagation process, which has to be done explicitly using the {{apply}} statement.
+
+Taking a snapshot of and restoring the state of a reactive automaton is the same as doing it with a relational one, using the {{read}} and {{write}} statements respectively. The first command saves the values of all continuous inputs and state variables, but not the timers. If the automaton that does not contain any timed rules its state can be reconstructed exactly later; otherwise timed rules will behave as if all signals have no previous history.
+
+Let's now see an example of how to deal with discrete signals using another automaton we've already seen before, {{Lines}}, which splits a string of characters into lines. We'll use it to split a test strings, and we'll print the results:
+
+  Main(String* args) {
+    lines : Lines;
+
+    // Initializing the automaton variable {{lines}}
+    done = apply lines;
+
+    // Multiline string used as a test input
+    str = "line 1\nline 2\nline 3\nline4\n";
+
+    // Feeding the input characters into the automaton
+    for ch <- untag(str):
+      lines.char = ch;
+      done = apply lines;
+      // If the output {{line}} is active, we just print it
+      if lines.line?:
+        Print(lines.line & "\n");
+      ;
+    ;
+  }
+
+Here the automaton instance is initialized before any input is set. That's because only continuous inputs should be set before initialization, and {{Lines}} has none. Once initialized, the automaton is fed characters from a test string. That's done in the first two lines of the loop. After each input character is processed we check to see if the {{line}} output is active and if it is we just print it. Checking whether a discrete output is active is syntactically similar to checking if it's defined, but with only one question mark at the end instead of two: {{instance.discrete_output?}}. Trying to read the value of a discrete output that is dormant has the same effect as trying to read an output that is in an undefined state: it triggers an exception that terminates the program. So in general in order to safely read the value of a discrete output you first have to check whether it's defined with {{instance.discrete_output??}} (this step was omitted in the example because we assumed {{line}} could never be undefined), then check if it's set with {{instance.discrete_output?}} and only after that you can safely read its value (with continuous outputs the second step is of course not necessary).
+
+
+Time-aware reactive automata
+
+The process of updating an instance of a reactive automaton is a bit more complex for reactive automata that contains timed rules or contains other automata that use timed rules. Here's an example:
+
+  // The first field is the reading from the sensor
+  // The second one is the time that has passed since the last
+  // reading, or since initialization for the first reading
+  // The third one is the sequence of values {{sensor_state}} is
+  // expected to have after each update step
+  (Maybe[Bool], Nat, WaterSensorState+)* water_sensor_test_data = (
+    (just(false), 40000, (:unknown, :submerged(false))),
+    (nothing,     10000, (:submerged(false))),
+    (nothing,     10000, (:submerged(false))),
+    (nothing,     10000, (:unknown)),
+    (just(true),  10000, (:submerged(true))),
+    (just(false), 50000, (:unknown, :submerged(false)))
+  );
+
+  Main(String* args) {
+    water_sensor : WaterSensor;
+
+    // Initialization
+    done = apply water_sensor;
+
+    for reading, time, exp_states <- water_sensor_test_data:
+      // Setting the value of the only input
+      water_sensor.raw_reading = reading;
+
+      // Setting the amount of time that has passed since
+      // the last update, or since the automaton was started
+      elapsed water_sensor time;
+
+      // Updating {{water_sensor}} and recording all
+      // the intermediate values of the only output
+      states = ();
+      loop
+        done = apply water_sensor;
+        states = (states | water_sensor.sensor_state);
+      while not done;
+
+      // Checking that the states of the sensor are
+      // the expected ones
+      if states != exp_states:
+        Print("Error\n");
+        return;
+      else
+        Print("OK\n");
+      ;
+    ;
+  }
+
+The {{elapsed}} command is used to provide the time information. Reactive automata don't actively try to keep track of time: instead, time is treated more like a sort of implicit input (albeit one with very special characteristics) that the client has to explicitly set before updating an automaton instance with {{apply}}. The first argument of {{elapsed}} is an automaton instance, and the second one is the number of milliseconds that have passed since the last time the instance was updated. If you don't explicitly provide that piece of information the internal clock of the automaton is not updated, and from the automaton perspective it's as if no time at all had passed since the last update. Note that you don't have to and actually cannot use the {{elapsed}} command before an automaton instance is initialized, as initialization is regarded as time zero.
+
+The other difference with automata that are not time-aware is that the {{apply}} command has to be called repeatedly until it returns true. In order to understand why, consider what would happen when applying the test inputs defined by {{water_sensor_test_data}}. The automaton receives the first sensor reading after 40 seconds of simulated time, but the rule that sets {{sensor_state}} to {{unknown}} is supposed to be triggered 10 seconds before that. So the first thing the automaton has to do when the {{apply}} command is executed is to catch up on all the backlog. It sets the internal clock forward by 30 seconds, the time when the first (and only, in this case) timer expires, and sets {{sensor_state}} to {{unknown}}. At that point, that is, after 30 seconds of simulated time, before even processing the new input the {{apply}} command finishes and returns {{false}}. It does so in order to give its client a chance to react to the first time-triggered update. After that the client is expected to call the {{apply}} command as many times as needed, until all expired timers have been processed. Once all timers have been taken care of the automaton processes the new inputs, which finally completes the update, and returns true.
+
+In a real application of course you're supposed to periodically update a time-aware automaton, even when no inputs have changed, in order to allow the timed rule to update its state in real time. But the behaviour of the automaton is always deterministic: whenever you give it a chance to update its state, it always completes all pending updates before processing the new inputs.
