@@ -115,19 +115,19 @@ The result of all these expressions is an ordinary value, which cannot be update
 You can also iterate through a mutable relation variable or a projection of it using a for loop:
 
   // Iterating through all groups a given user has joined
-  for g <- memberships(u, ?):
+  for g <- memberships(u, ?) {
     ...
-  ;
+  }
 
   // Iterating through the ids of all users who have joined a given group
-  for u <- memberships(?, g):
+  for u <- memberships(?, g) {
     ...
-  ;
+  }
 
   // Iterating through the entire relation
-  for u, g <- memberships:
+  for u, g <- memberships {
     ...
-  ;
+  }
 
 Just like normal relations, mutable relation variables can be either unary, binary or ternary. Each type has its own set of use cases: unary ones are typically used to state the existence of a given entity, or to encode boolean attributes; binary ones to store entity attributes (both mandatory and optional, and single-valued or multi-valued) or relationships; and ternary ones for attributes of relationships (as opposed to of entities). We'll see plenty of example later.
 

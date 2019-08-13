@@ -191,17 +191,60 @@ Also, the empty ternary relation is the same entity as the empty set and the emp
 The language is meant to provide, once it's fully implemented, relations of arbitrary arity, but for now unary (i.e. sets), binary and ternary relations are all there is.
 
 
-Strings
+Derived data types
 
-Strings in Cell are ordinary values built using the mechanisms seen above. The only special thing about them is that they have some syntactic sugar like in any other language. At their core, strings are just sequences of non-negative integer numbers, where each number is the ASCII/Unicode value of the corresponding character, tagged with the symbol {{:string}}. In their syntactically "sugared" representation, they are enclosed in double quotes. The following are different ways of writing exactly the same value:
+All Cell values are created by combining the data types we've seen so far: integers, floating point numbers, symbols, sequences, sets, binary and ternary relations and tagged values. But there's also a number of other common data types that are treated a bit specially, in the sense that they have a standard representation and some syntactic sugar, even though they're built using the primitives described above. So far, there's four of them: strings, characters, dates and times, but more may be added in the future.
 
-     "Hi there!\n"
-     :string(72, 105, 32, 116, 104, 101, 114, 101, 33, 10)
-     :string((72, 105, 32, 116, 104, 101, 114, 101, 33, 10))
 
-There are five special escape codes, {{\n}}, {{\t}}, {{\r}} {{\"}} and {{\\}}, and the generic numeric one, a backslash followed by exactly four hexadecimal digit, {{\XXXX}}, where the four digits represent the 16-bit character Unicode code point. If you need to use Unicode characters whose code point is equal to or higher than {{2^16}} and cannot be represented by a 16-bit number, for now you'll have to use the more cumbersome standard notation for values, without the syntactic sugar.
+Strings and characters
 
-There's no separate character type, each character can be represented either by an integer number (its Unicode code point) or by a one-character string (more on this when we talk about types).
+Strings in Cell are just sequences of non-negative integers, where each number is the ASCII/Unicode code point of the corresponding character, tagged with the symbol {{:string}}. In their syntactically "sugared" representation, they are enclosed in double quotes. The following are different ways of writing exactly the same value:
+
+  "Hi there!\n"
+  string(72, 105, 32, 116, 104, 101, 114, 101, 33, 10)
+  :string((72, 105, 32, 116, 104, 101, 114, 101, 33, 10))
+
+There are five special escape codes, {{\n}}, {{\t}}, {{\r}} {{\"}} and {{\\}}, and the generic numeric one, a backslash followed by exactly four hexadecimal digit, {{\XXXX}}, where the four digits represent the 16-bit code point of a character in the Basic Multilingual Plane.
+
+There's no separate character type, and character are represented by a number, their unicode code point. There's a bit of syntactic sugar though: a character enclosed in backquotes is just another way to write its code point. The following expressions, for example, all evaluate to {{true}}:
+
+  `a`  == 97
+  `Z`  == 90
+  `4`  == 52
+  `\n` == 10
+  `\t` == 9
+  `\\` == 92
+  `\`` == 96
+  `∞`  == 8734
+  `€`  == 8364
+  `海` == 28023
+
+This is yet another way to write the string {{"Hi there!\n"}}:
+
+  :string((`H`, `i`, ` `, `t`, `h`, `e`, `r`, `e`, `!`, `\n`))
+
+
+Dates and time
+
+Time in Cell is represented by integers tagged with the symbol {{:time}}. The integer is the UNIX Epoc time in nanoseconds, that is, the number of nanoseconds that have elapsed sinced 00:00:00 Thursday, 1 January 1970 (the UNIX Epoc), not counting leap seconds. Dates too are represented as tagged integers: the tag is the symbol {{:date}} and the integer is the number of days that have passed since 1 Jan 1970. In their syntactically sugared form they are enclosed in backquotes and use the {{`YYYY-MM-DD HH.MM.SS`}} format for time or {{`YYYY-MM-DD`}} for dates. Time literals can also specify the number of nanoseconds: {{`YYYY-MM-DD HH-MM-SS.NNNNNNNNN`}}. The following expressions all evaluate to {{true}}:
+
+  `1970-01-01` == :date(0)
+  `1970-01-02` == :date(1)
+  `1969-12-31` == :date(-1)
+  `1582-10-15` == :date(-141427) // First day of the Gregorian calendar
+  `2000-01-01` == :date(10957)
+
+  `1970-01-01 00:00:00` == :time(0)
+  `1970-01-02 12:00:00` == :time(129600000000000)
+  `1969-12-31 23:59:59` == :time(-1000000000)
+  `1999-12-31 23:59:59` == :time(946684799000000000)
+
+  `1970-01-01 00:00:00.000000001` == :time(1) // 1ns after the UNIX Epoc
+
+  `1970-01-01 00:00:00.002` == :time(2000000) // 2ms after the UNIX Epoc
+  `1969-12-31 23:59:59.995` == :time(-5000000) // 5ms before the UNIX Epoc
+
+Since integers are 64-bits wide, the time range that can be represented using this format goes from {{`1677-09-21 00:12:43.145224192`}} to {{`2262-04-11 23:47:16.854775807`}}, inclusive.
 
 
 Physical implementation
@@ -216,11 +259,9 @@ Sequences, for instance, are currently implemented as arrays, and consequently s
 
 That doesn't mean of course that you cannot implement you own data structures on top of the existing ones, if the circumstances require it. You could, for example, define a your own set or map types using the language provided types as primitives, if the native versions don't meet your needs, and there are indeed times when you would actually have to do so. But in all other cases, letting the compiler/runtime do the low-level work will make your code simpler, and your data easier to inspect and manipulate.
 
-Another data structure (or, rather, set of data structures) that benefits greatly from a clear distinction between logical definition and physical implementation is records. Remember that records in Cell are just a special case of maps, which in turn are just a special case of binary relations. This provides the ability to treat records as generic maps and, for example, to merge them (in a type-safe way: more on this later) or to build them up dynamically. On the other hand, though, representing records as maps at the physical level is nowhere as efficient as using ad-hoc data structures. So (starting with version 0.2) the compiler creates (subject to a number of conditions that are discussed elsewhere) specific low-level data structures for all record types that are explicitly declared in your code, which are just as efficient as structs or classes in languages like C or Java, and transparently switches between the optimized and generic representations whenever needed.
+Another data structure (or, rather, set of data structures) that benefits greatly from a clear distinction between logical definition and physical implementation is records. Remember that records in Cell are just a special case of maps, which in turn are just a special case of binary relations. This provides the ability to treat records as generic maps and, for example, to merge them (in a type-safe way: more on this in another chapter) or to build them up dynamically. On the other hand, though, representing records as maps at the physical level is nowhere as efficient as using ad-hoc data structures. So the compiler creates (subject to a number of conditions that are discussed elsewhere) specific low-level data structures for all record types that are explicitly declared in your code, which are just as efficient as structs or classes in languages like C or Java, and transparently switches between the optimized and generic representations whenever needed.
 
-Similar considerations apply to all other collection types as well. Sets are currently implemented as sorted arrays of their elements, which is reasonably efficient when building immutable sets in just one go, but does not allow (functional) insertion or removal of elements (removing or adding an element requires rebuilding the entire set). This is of course only temporary, and the final implementation will make use of either sorted arrays or balanced trees (or a combination of them), depending on the circumstances.
-
-Just like sets, maps and binary or ternary relations are currently implemented as sorted arrays of their elements. They support fast search based on any combination of arguments, but have to be built at once, since adding or removing an entry currently involves creating an entirely different collection. Maps will soon provide a balanced tree implementation as well though, with O(log(n)) insertion and deletion.
+Similar considerations apply to all other collection types as well. Sets and maps can be implemented as sorted arrays, balanced binary trees or a combination of the two. Sorted arrays are used when creating a set or map in just one go, but when you try to insert or remove an element or a key/value pair in an existing set or map, an operation that cannot be supported efficiently with arrays, the language switches to a hybrid representation that combines arrays and binary trees, so that such operations can be performed efficiently in O(log(N)).
 
 As we'll see in another chapter, relational automata can contain "mutable" relation variables. Those variables contain, conceptually speaking, ordinary relation values, but they are restricted in the way they can be used, so that they can be updated in place without compromising the functional nature of the language. In that case, the compiler uses a completely different implementation approach, in order to support both efficient insertion of new tuples and deletion of existing ones.
 

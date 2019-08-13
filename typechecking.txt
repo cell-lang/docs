@@ -113,9 +113,8 @@ We're now going to take a closer look at type variables and generic programming.
 
   T* concat(T* s1, T* s2) {
     s = s1;
-    for x <- s2:
+    for x <- s2
       s = (s | x);
-    ;
     return s;
   }
 
@@ -496,9 +495,8 @@ As explained before, there's usually no need to explicitly declare local variabl
     l : List[T];
 
     l = :empty_list;
-    for x <- xs:
+    for x <- xs
       l = :list(x, l);
-    ;
     return l;
   }
 
@@ -512,9 +510,8 @@ and rewrite {{seq2list(..)}} as follow:
 
   List[T] seq2list(T* xs) {
     l = :empty_list;
-    for x <- xs:
+    for x <- xs
       l = list(x, l);
-    ;
     return l;
   }
 

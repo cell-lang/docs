@@ -51,7 +51,7 @@ or more simply like this:
     set updates = updates + 1;
   }
 
-but in the latter case you're allowed to ommit the {{<}} and {{>}} symbols, if the type between them is not a union type. In order to access the value of the message you need to use the keyword {{this}}, as demonstrated in the last handler, {{Counter.reset(Int)}}. Note that the same keyword is also used in several object-oriented languages, but the meaning is different: in OOP it's used to refer to the target of a method (that is, the object that "receives the message") while here it's used to refer to the message itself. There's no way in this context to refer to (the value of) the automaton instance that receives the message (only its individual fields can be accessed), because that value cannot be aliased as we explained in the previous chapter.
+but in the latter case you're allowed to ommit the {{<}} and {{>}} symbols, if the type between them is not a union type. In order to access the value of the message you need to use the keyword {{this}}, as demonstrated in the last handler, {{Counter.reset(Int)}}. Note that the same keyword is also used in several object-oriented languages, but the meaning is different: in OOP it's used to refer to the target of a method (that is, the object that "receives the message") while here it's used to refer to the message itself. There's no way in this context to refer to (the value of) the automaton instance that receives the message (only its individual fields can be accessed), because that value cannot be aliased as we explained in the previous chapters.
 
 Any number of message handlers can be merged without restrictions, whenever that's convenient. The four message handlers of {{Counter}} can for example be rewritten as follow:
 
@@ -88,14 +88,14 @@ In spite of a few superficial similarities, message handlers differ from methods
 
 ** Similarily to messages in the actor model, but unlike methods in OOP, messages in Cell are just ordinary values, that can be manipulated like any other piece of data: they can be copied, passed around, sent over a network and saved to a file. It's very easy, for instance, to store and keep a record of all messages that have been received by any given automaton instance.
 ** Another similarity with the actor model is that message handlers don't return a value: there's a strict separation between commands/messages and queries/methods. Such a programming model is more reliable when writing distributed applications.
-** Automata can only receive messages, not send them, even to themselves. There's no such thing as "message passing" between automata. That's by design and it's never going to change: automata are meant to be self-contained entities, oblivious to the world around them, the only exception being other automata they're wired to, which are read-only to them anyway. Any inter-automata update logic there is, it has to go somewhere else. For the time being, that typically means it has to be dealt with in the host language, not in Cell. The only exception to this is nested automata, which are not regarded as indipendent entities but only as a part of their parent, which is therefore allowed to send messages to them.
-** The scope of the side effects caused by a message handler is limited to the automaton instance that received the message. The state of other automata is not affected, and that includes both dependees and dependants of the automaton that receives the message.
-** All update instructions that are issued as part of the execution of a message handler do not take effect immediately. Instead, they are retained and applied only when the message handler returns, which means that during the entire execution of the latter the state of the automaton doesn't change at all. Not only that, but also the specific order in which those commands are issued is ignored. This is a major difference, that completely changes the way you have to write and think about update code. It comes with a long list of trade-offs, and it certainly puts an extra burden on the developer. I believe the advantages outweigh the disadvantages, but the latter are substantial. We'll discuss all the trade-offs in detail later.
+** Automata can only receive messages, not send them, even to themselves. There's no such thing as "message passing" between automata. That's by design and it's never going to change: automata are meant to be self-contained entities, oblivious to the world around them, the only exception being other automata they're wired to. Any inter-automata update logic there is, it has to go somewhere else. For the time being, that typically means it has to be dealt with in the host language, not in Cell. There's only one exception to this, and it's an important one: a message handler can send a message to the dependees of the current automaton.
+** The scope of the side effects caused by a message handler is limited to the automaton instance that received the message and its dependees. The state of other automata is not affected, and that includes the dependants of the target of the message.
+** All update instructions that are issued as part of the execution of a message handler do not take effect immediately. Instead, they are retained and applied only when the message handler returns, which means that during the entire execution of the latter the state of the automaton doesn't change at all. Not only that, but also the specific order in which those commands are issued is ignored. This is a major difference, that completely changes the way you have to write and think about update code. It comes with a long list of trade-offs, which we'll discuss in detail later.
 
 
 Atomic update instructions
 
-We've already seen our first atomic update instruction, the {{set}} statement, which simply sets the value of a member variable. It can be used only with ordinary variables, and not with mutable relation variables or nested automata. The most important thing to notice here is that any given member variable can be assigned only once during the execution of the message handler: trying to set the same variable twice would cause the message handler to fail. That's because, as explained above, the order in which assignments are issued is ignored, and therefore there's no way to decide which of two (conflicting) assignments targeting the same member variable should actually be executed.
+We've already seen our first atomic update instruction, the {{set}} statement, which simply sets the value of a member variable. It can be used only with ordinary variables, not with mutable relation variables. The most important thing to notice here is that any given member variable can be assigned only once during the execution of the message handler: trying to set the same variable twice would cause the message handler to fail. That's because, as explained above, the order in which assignments are issued is ignored, and therefore there's no way to decide which of two (conflicting) assignments targeting the same member variable should actually be executed.
 
 In order to update mutable relation variables the language provides two commands, {{insert}} and {{delete}}. To illustrate them, we'll make use of some of the automata we defined in the previous chapter. Here's our first example:
 
@@ -199,7 +199,7 @@ Inserting attributes
 When inserting an entity or a relationship from a dataset you'll generally have to also insert attributes stored in ancillary relations. That tends to be rather very verbose, so the language provides some syntactic sugar here. If you have a set of mutable relation variables like the following ones:
 
   schema Users {
-    user(UserId):
+    user(UserId)
       name            : String, // Mandatory
       date_of_birth?  : Date,   // Optional
       phone_number+   : String; // One or more values
@@ -210,7 +210,7 @@ When inserting an entity or a relationship from a dataset you'll generally have 
 Here's how you can write a message handlers that inserts a new user and all its attributes:
 
   User.add_user(id: UserId, name: String, date: Date, phone: String) {
-    insert user(this.id):
+    insert user(this.id)
       name          = this.name,
       date_of_birth = this.date,
       phone_number  = this.phone;
@@ -228,7 +228,7 @@ It's completely equivalent to the following, more verbose version:
 Here's another, more complex example:
 
   User.add_user(id: UserId, name: String, date: Date?, phones: [+String]) {
-    insert user(this.id):
+    insert user(this.id)
       name          = this.name,
       date_of_birth = this.date if this.date?,
       phone_number  = p : p <- this.phones;
@@ -239,12 +239,10 @@ which is equivalent to:
   User.add_user(id: UserId, name: String, date: Date?, phones: [+String]) {
     insert user(this.id);
     insert name(this.id, this.name);
-    if this.date?:
+    if this.date?
       insert date_of_birth(this.id, this.date);
-    ;
-    for p <- this.phones:
+    for p <- this.phones
       insert phone(this.id, p);
-    ;
   }
 
 Whenever you insert a new entity or relationship in the dataset, the compiler checks that you're also inserting all its mandatory attributes. More specifically, whenever you define, either implicitly or explicitly, a foreign key like this:
@@ -329,40 +327,42 @@ Now each message handler just calculates the new value for {{value}}, which is t
 In order to better understand the respective roles of message handlers and mutator methods and the differences between them it's useful to review the life cycle of an update. Once an automaton receives a message, the corresponding handler is invoked. A message handler is the entry point for any update to any relational automaton: an update starts when a handler is invoked, and finishes when the handler returns, after which the state of the automaton is finally updated. Until the handler returns no other handler can be invoked, and therefore no other message can be received: the execution of two message handlers of the same automaton cannot be interleaved or nested, message handlers cannot invoke each other in any way, and automata cannot send messages to themselves. Mutators on the other hand can only be run as part of the execution of a message handler, and cannot be invoked in any other context. The update commands they issue are only applied when their enclosing handler returns, and if they fail they cause the entire handler to fail. Message handlers can only be invoked from the outside, and they constitute the public interface of relational automata with regards to updates, while mutators are only meant to provide a way to implement message handlers in a modular way.
 
 
-Nested automata
+Wired automata
 
-As already explained, automata are passive entities that can only receive but not send messages. The only exception to this rule is nested automata, which are regarded as part of the automaton they're declared in, instead of indipendent entities. Sending messages is actually the only way to mutate the state of nested automata, whose member variables cannot be modified directly by their parents. Here's an example:
+As already explained, automata are passive entities that can only receive but not send messages, with one exception: the body of a message handler can send a message to the dependees of the current automaton. Here's an example, extending something we saw in a previous chapter:
 
-  schema Counter {
-    value:   Int = 0;
-    updates: Int = 0;
+  schema Logins {
+    usernames(Nat, String) [key: 0, key: 1];
+    memberships(Nat, String);
   }
 
-  type CounterMsg = incr, decr, reset, reset(Int);
-
-  schema CounterPair {
-    counter_1 : Counter;
-    counter_2 : Counter;
+  Logins.remove_user(id: Nat) {
+    delete usernames(this.id, *), memberships(this.id, *);
   }
 
-  CounterPair.update_counter(id: <0..1>, msg: CounterMsg) {
-    if this.id == 0:
-      counter_1 <- this.msg;
-    else
-      counter_2 <- this.msg;
-    ;
+  schema ChatServer : Logins {
+    connected_users(Nat);
   }
 
-{{CounterPair}} has only one message handler, which basically takes as argument a message for one of its nested {{Counter}}s, along with the identifier of the counter it has to be dispatched to, and just forwards the message to its intended target. This is, incidentally, an example of the extra flexibility you get by using messages: {{update_counter(..)}} act as a dispatch hub for any type of message {{Counter}} can accept, no matter how many of them there are.
+  ChatServer.disconnect(id: Nat) {
+    delete connected_users(this.id);
+    super <- remove_user(id: this.id);
+  }
 
-You're currently allowed to send only one message to each nested automaton during the entire execution of a message handler, just like you can assign any member variable only once. In this case, though, being able to send a sequence of messages would actually be useful, and it doesn't necessarily have to cause any ambiguity: it's currently not supported only because it's more complex to implement efficiently in the presence of transactions.
+Just as before, {{Logins}} contains information about users who have logged in and the chat groups they've joined, while {{ChatServer}} keeps a list of the users who have connected to the server (a user here can be connected without being logged in: the steps of the process are connect -> login -> logout -> disconnect). Whenever a user disconnects from the server, it must be automatically logged out, and removed from all chat groups he's in. That's done by the {{super <- remove_user(id: this.id)}} statement inside the body of {{ChatServer.disconnect(..)}}. The general form of the statement is:
+
+  super <- message;
+
+where {{message}} can of course be an arbitrary expression. The execution of the message handler of the dependee is regarded as part of that of the dependant: the two succeed or fail together, and all updates are applied at the same time, so the effects of sending a message are not visible during the execution of the message handler of the dependant, and the order it's issued relative to other update instructions is irrelevant.
+
+If there's more than one dependee, the compiler uses the type of the message to decide which one it should be sent to. If there's any ambiguity (that is, if a message of the given type is accepted by more than one dependee) the compiler will reject your code, as there's no way yet to explicitly specify the intended target.
+
+A message handler can send only one message to each dependee. Sending more than one to the same target will cause a runtime error.
 
 
 Execution model and error handling
 
 The update process triggered by the reception of a message can be divided into several distinct phases. The first step is to dispatch the message to the corresponding message handler, which is similar to the dispatch of a polymorphic function. The next phase is the actual execution of the message handler, during which the state of the automaton does not change, and all the update instructions that are issued are just stored in a separate data structure and left there. If any error occurs during the handler's execution, the message and the set of update commands issued up to that point are just discarded, and the sender of the message is notified of the error. Once the handler returns, all update commands are first checked to make sure they don't violate any integrity constraints. If they do, the message is again discarded and the state of the automaton is left untouched, just as if an error had occurred during the execution of the handler. Otherwise the state of the automaton is updated and the sender is notified that the message was processed successfully.
-
-Messages sent to nested automata are processed as part of the execution of the enclosing message handler: all updates are applied only after the main handler returns, and if the error handler in the nested automaton fails, it causes the main message handler to fail as well, so as to avoid partial failures.
 
 
 Deferred updates: issues and rational
@@ -381,10 +381,10 @@ Message handlers and mutator methods look a lot like ordinary imperative code, a
     increment_experience(Int amount) {
       new_experience = experience + amount;
       set experience = new_experience;
-      if new_experience > next_level_experience(level):
+      if new_experience > next_level_experience(level) {
         level_up();
         top_up_health();
-      ;
+      }
     }
 
     level_up() {
@@ -400,7 +400,7 @@ but it doesn't in Cell. The problem lies in the way {{level_up()}} and {{top_up_
 
 The choice of such an execution model is probably the most puzzling design decision in the entire language since it makes update code more difficult to write, it adversely affects its modularity, and was not, in any way, dictated by other features of the language. But in spite of its issues, it also has a couple of important advantages.
 
-One major problem with imperative code is that it doesn't lend itself to parallel execution: it's notoriously difficult to write concurrent imperative programs, and even more so for a compiler to (semi-)automatically and safely parallelize the execution of existing code. One much hyped advantage of pure functional programming on the other hand is that it is very well suited to parallel execution: since functions are referentially transparent and have no side effects, two function calls can always be executed in parallel, as long as neither depends on the other's result. And in spite of their imperative syntax, message handlers in Cell are, in fact, pure functions: the only thing that's different about them (apart from the syntax) is the fact that instead of explicitly returning an ordinary value they implicitly return a set of {{set}}/{{insert}}/{{update}}/{{delete}} commands that are then checked and executed by some compiler-generated code. Both the execution of the message handler and the subsequent checking and execution of the resulting commands can potentially be made to take advantage of multi-core processors safely and with little effort on the programmer's part. That's in addition to the potential inter-automata parallelism: since automata cannot share any mutable state (thanks to the combination of immutability for some data structures and the impossibility of aliasing for others) they can potentially be safely updated concurrently, unless they are nested inside one another or in a dependant/dependee relationship. Now, just to be clear, what we're talking about here is just leaving the door open for a future implementation to take advantage of parallelism: currently there's no support for concurrency at all, and a fully parallel implementation is going to be a long-term effort.
+One major problem with imperative code is that it doesn't lend itself to parallel execution: it's notoriously difficult to write concurrent imperative programs, and even more so for a compiler to (semi-)automatically and safely parallelize the execution of existing code. One much hyped advantage of pure functional programming on the other hand is that it is very well suited to parallel execution: since functions are referentially transparent and have no side effects, two function calls can always be executed in parallel, as long as neither depends on the other's result. And in spite of their imperative syntax, message handlers in Cell are, in fact, pure functions: the only thing that's different about them (apart from the syntax) is the fact that instead of explicitly returning an ordinary value they implicitly return a set of {{set}}/{{insert}}/{{update}}/{{delete}} commands that are then checked and executed by some compiler-generated code. Both the execution of the message handler and the subsequent checking and execution of the resulting commands can potentially be made to take advantage of multi-core processors safely and with little effort on the programmer's part. That's in addition to the potential inter-automata parallelism: since automata cannot share any mutable state (thanks to the combination of immutability for some data structures and the impossibility of aliasing for others) they can potentially be safely updated concurrently, unless they are wired together as dependant and dependee. Now, just to be clear, what we're talking about here is just leaving the door open for a future implementation to take advantage of parallelism: currently there's no support for concurrency at all, and a fully parallel implementation is going to be a long-term effort.
 
 Another problem is that the execution model of imperative languages, while undoubtedly convenient in simple cases like the example shown above, leads to nasty spaghetti code when programming in the large. Even in a moderately complex real world application, an update may well involve mutating the data structures that encode the state of the application in hundreds of different places. The goal of an update is to transition those data structures from the state they have before the update to the one they're supposed to have when the update is complete. But in order to do so they have to go through many different intermediate states each of which is the result of applying an atomic update to the previous one, and it's also common for specific pieces of information to be mutated several times during a single global update. The vast majority of those partially updated states are inconsistent, since they're by definition the result of updating only a part of the target data structures. But all those intermediate states are visible to the application code, with the result that's very difficult to know, when reading the value of a particular variable, whether such a value is the initial one, the final one, or just an intermediate one. The correctness of the code is highly dependendent on the order in which side effects are carried out, but such order is very difficult to control when updating a large object graph.
 

@@ -3,9 +3,9 @@ Frequently Asked Questions
 
 Why yet another programming language?
 
-Because there's currently no high-level programming language for writing stateful software that I'm aware of.
+Because there's currently no high-level programming language for writing stateful software that I'm aware of. That's the short answer.
 
-A useful way to think about software is to classify it into three main categories, based on the class of tasks it performs: pure computation, state and updates, and I/O.
+To elaborate a bit on that we need to discuss separately the three main types of what we generically refer to as "computation": pure computation, state and updates, and I/O.
 
 Pure computation is the process of computing a result from some input data. That's what {#{pure-function-link}#} do. Some types of software, like compilers or scripts that perform scientific calculations do hardly anything else.
 
@@ -17,7 +17,7 @@ For pure computation, there's certainly a number of languages that can be regard
 
 But when it comes to managing state, we're still living in the stone age. The programming paradigm that has been by far the most popular for the last twenty years or so, OOP, is a complete disaster, hampered by, among (many) other things, a very low-level way of representing information, one that makes data difficult to inspect, manipulate and update with the result that code ends up being far more complex that it should be, and much less reliable. Functional programming's sins, on the other hand, are mainly of omission: in its pure form it simply doesn't have a satisfactory way to deal with state, which I suspect is the main reason it never expanded outside a few niches. Impure functional programming is probably the best thing we've at the moment, but it's still far from ideal.
 
-What's worse, innovation seems to be dead. With only one (admittedly important) {#{clojure-link}#} I'm aware of, there's been no real progress towards higher-level languages for this type of software for the last 30 years or so.
+What's worse, innovation seems to be dead. With only one (admittedly important) {#{clojure-link}#} I'm aware of, there's been no real progress towards higher-level languages for this type of software for {#{erlang-link}#}.
 
 The situation is even worse, if possible, for I/O. Even task that could be carried out automatically in any kind of sane programming language/environment, often end up being a huge drag on developers. Think for example of how much much effort goes into writing code that only moves data into and out of databases. Or how much more complex it is to implement a client/server application, compared to a local application with similar functionalities, and how tedious and time consuming it often is to implement even trivial things like sending data from the client to the server and vice-versa. Yet the majority of these task could be performed automatically by the compiler under the hood, if one starts with a properly designed language and network architecture.
 
@@ -30,7 +30,7 @@ How does Cell improve on existing languages?
 
 The single most important improvement is in the way information is represented. Cell's data model combines a staple of functional programming, {#{adt-link}#}, with relations and other ideas from relational databases. That alone goes a long way toward simplifying (drastically, in some cases) both the data structures used to encode the state of an application and the code that manipulates them. The data model and type systems are also entirely structural, which brings a number of benefits that are discussed elsewhere, and most importantly enables one of the language's major features: orthogonal persistence.
 
-There's also a strict separation between pure computation and state updates, and the developer is encouraged to shift as much complexity as possible into the purely functional part of the code, which is intrinsically less problematic to deal with. That provides many of the benefits of functional programming, while avoiding the difficulties the latter paradigm has in dealing with state. That's made more effective by the fact that the state of the application can be partitioned in separate compartments (called automata) that do not share any mutable state and can be safely updated concurrently. Future versions of the language will provide additional tools that will help simplifying the part of the codebase that mutates the application's internal state.
+There's also a strict separation between pure computation and state updates, and the developer is encouraged to shift as much complexity as possible into the purely functional part of the code, which is intrinsically less problematic to deal with. That provides many of the benefits of functional programming, while avoiding the difficulties the latter paradigm has in dealing with state. That's made more effective by the fact that the state of the application can be partitioned in separate components (called automata) that do not share any mutable state and can be safely updated concurrently. Future versions of the language will provide additional tools that will help simplifying the part of the codebase that mutates the application's internal state.
 
 The combination of all the above properties, plus the fact that I/O is also separate from pure computation and updates, enables a number of features that are not found in conventional languages.
 
@@ -40,10 +40,31 @@ The second one is orthogonal persistence, that is, the ability to take a snapsho
 
 The third one is a very robust error-handling mechanism, based on transaction. If an exception is thrown during an update, or if your code violates any of the integrity constraints that are placed on your data model, the entire update is simply rolled back and discarded, and the state of your application is left untouched.
 
+Then there's support for reactive programming, which is still in its infancy. At the moment all the language provides is reactive automata, which can be used to implement certain specific types of reactive software, but reactive programming itself is something much more general than that, and a lot more is coming in the future.
+
+The last major part of the language will be its network model/architecture, which hasn't been implemented yet.
+
 
 What is functional/relational programming?
 
-The term "functional/relational programming" was coined (I believe) in a paper that came out more than a decade ago, {#{out-of-the-tar-pit-links}#}. It refers to a programming paradigm that combines functional programming with some version of the relational model (in the case of Cell one that is very different from the one used in SQL databases), with the former providing the general purpose programming capabilities, and the latter the ability to encode, navigate, query and update large and complex application states or datasets.
+The term "functional/relational programming" was coined (I believe) in a paper that came out more than a decade ago, {#{out-of-the-tar-pit-links}#}. It refers to a programming paradigm that combines functional programming with some version of the relational model (in the case of Cell one that is very different from the flavor used in SQL databases), with the former providing the general purpose programming capabilities, and the latter the ability to encode, navigate, query and update large and complex application states or datasets.
+
+The starting point of functional/relational programming is the observation that the primary source of complexity and unreliability in our programs is the presence of way too much mutable state. So in order to address that problem, the first step is to avoid state altogether whenever possible. That means doing all pure computation using the functional part of the language, and clearly separating pure code from code that has side effects.
+
+The next step is to identify the parts of an application's state that are redundant, and to get rid of them. A piece of information is redundant if it can be derived from other pieces of information that are already present in the system, or, in other words, if it can always be reconstructed after having been deleted. Once you've removed all redundant information what you're left with is the essential state: at this point, there's nothing else you can remove without permanently losing information. That leaves you with a much smaller state, which is therefore a lot easier to deal with. Then you need to design the data structures that encode the essential state so as to avoid invalid/inconsistent states as much as possible. These are not new ideas: they have been conventional wisdom in the database community for nearly half a century.
+
+For this latter step to be possible, you need a high-level data model, and here the relational model, in one form or another, is the only game in town. A high level data model also has the added benefit of making information easier to search, navigate and manipulate.
+
+
+Why is data/state representation so important?
+
+This is the kind of thing that is difficult to explain in the abstract, but which becomes obvious after you've implemented a nontrivial piece of software with a language that provides a high-level data model.
+
+But as an example, compare the mathematical definition of a set with its implementation in an imperative or even functional language. A set in mathematics is an extremely simple entity: it's just a collection of elements with no order and no duplicates. Operations like union, intersection, difference or cartesian product can be defined in a single very short line.
+
+Now compare that to an implementation in any imperative or even functional language that uses, say, {#{red-black-tree-link}#}. Those data structures contain a lot of low-level "information" that has nothing to do with the abstract notion of set, and are subject to complex invariants that have to be carefully maintain every time they are updated. A typical implementation in an imperative language consists of around a thousand lines of code, and it's very difficult to get right.
+
+And while red-black trees may be an especially complex example, the data structures used to encode the state of any imperative (or, to a lesser extent, functional) program are every bit as low level and suffer from the same problems, like the presence of an overwhelming amount of low-level noise and complex, hard to maintain dependencies between their components, only on a much larger scale.
 
 
 What is reactive programming?
@@ -90,4 +111,4 @@ The vast majority of developers regard the relational model as some sort of lega
 
 In all likelihood, the relational model gets it bad rap from the fact that the only implementation of it developers are familiar with is the one found in SQL databases. That particular implementation was very lame to begin with and has not really evolved since its initial design nearly half a century ago. On top of that, it was designed specifically for databases, and it's not well-suited for general purpose programming. But all those flaws and limitations are specific to a particular implementation, not the relational model itself.
 
-The best way to illustrate the advantages of functional/relational programming over OOP is through a case study. Once version 0.5 is out and the basic set of features of the language is finally complete, I'll post and compare the implementations of a small but realistic application in the two paradigms (for a problem that is universally regarded as especially well-suited to OOP) and that will show how much shorter, simpler and elegant the functional/relational implementation can be, even when such a comparison is made on OOP's home turf.
+The best way to illustrate the advantages of functional/relational programming over OOP is through a case study. Once version 0.5 is out and the basic set of features of the language is finally complete, we'll be comparing the implementations of a number of small but realistic applications in the two paradigms (for a problems that are universally regarded as especially well-suited to OOP) and that will show how much shorter, simpler and more elegant the functional/relational implementation can be, even when such a comparison is made on OOP's home turf.

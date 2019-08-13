@@ -3,13 +3,13 @@ Aggregate functions
 Using this schema:
 
   schema Market {
-    product(ProductId):
+    product(ProductId)
       description : String;
 
-    customer(CustomerId):
+    customer(CustomerId)
       name : String;
 
-    purchase(PurchaseId):
+    purchase(PurchaseId)
       item    : ProductId,
       buyer   : CustomerId,
       amount  : Int,
@@ -21,9 +21,8 @@ let's say we want to calculate the total amount of items sold on a given date. O
   using Market {
     Int total(Date date) {
       total = 0;
-      for p <- date(?, this.date):
+      for p <- date(?, this.date)
         total = total + amount(p);
-      ;
       return total;
     }
   }
@@ -34,9 +33,8 @@ While this would work, it's not a satisfactory way to do it. The above method co
 
   Int sum([Int] xs) {
     s = 0;
-    for x <- xs:
+    for x <- xs
       s = s + x;
-    ;
     return s;
   }
 
@@ -62,7 +60,7 @@ The type of the first argument of an aggregate function is the type of the value
 
 The first step in the evaluation of an aggregate function call is the evaluation of its aggregate variables. Let's say the numbers we want to add are {{4 5 2 9}}. Here's a graphical depiction of the how {{s}} is calculated:
 
-{#{sum-eval.svg}#}
+{<{<div><img src='sum-eval.svg' style='width:100%'></div>}>}
 
 The definition of an aggregate variable consists of two parts: an initialization expression between the {{=}} and {{:}} signs (just {{x}} in this case) and a reduction rule after the column: {{s1 s2 -> s1 + s2}}. First the initialization expression is evaluated for each input elements. Then the resulting values are repeatedly merged pairwise using the reduction rule until there's only one left.
 
@@ -76,7 +74,7 @@ Let's go through a number of examples. {{count(..)}} just returns the number of 
 
 Here's the evaluation process of the aggregate variable {{c}}:
 
-{#{count-eval.svg}#}
+{<{<div><img src='count-eval.svg' style='width:100%'></div>}>}
 
 Incidentally, note that usually the size operator {{|..|}} (which can be applied to both mutable relation variables and their subsets as we've already seen in a previous chapter) is a much faster alternative to {{count(..)}}, since in most cases it can produce its result in constant time.
 
@@ -86,7 +84,7 @@ Incidentally, note that usually the size operator {{|..|}} (which can be applied
     Int p = x : p1 p2 -> p1 * p2;
     return 1 | p;
 
-{#{prod-eval.svg}#}
+{<{<div><img src='prod-eval.svg' style='width:100%'></div>}>}
 
 {{norm(..)}} calculates the L2 norm (that is, the square root of the sum of the squares) of a collection of floating point numbers:
 
@@ -94,7 +92,7 @@ Incidentally, note that usually the size operator {{|..|}} (which can be applied
     Float s = x * x : s1 s2 -> s1 + s2;
     return 0.0 | sqrt(s);
 
-{#{norm-eval.svg}#}
+{<{<div><img src='norm-eval.svg' style='width:100%'></div>}>}
 
 An aggregate function can make use of more than one aggregate variables. Here's one way to define a function that calculates the average of its inputs, which is not defined for empty collections:
 
@@ -148,4 +146,4 @@ We've already explained why striving for full determinism is so important when p
 
 Future query language
 
-Aggregate functions are at the moment just a more convenient way to implement logic that could otherwise be implemented with only marginally more effort using a loop, and their design may seem pretty bizarre, but in fact they're just a piece of larger puzzle. Aggregate functions are just the first bit of a future query language that will become a major part of Cell at some point in the future.
+Aggregate functions are at the moment just a more convenient way to implement logic that could otherwise be implemented with only marginally more effort using a loop, and their design may seem pretty bizarre, but in fact they're just a piece of larger puzzle. Aggregate functions are just the first bit of a future declarative language that will become a major part of Cell at some point in the future.

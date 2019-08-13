@@ -1,5 +1,7 @@
 Benchmarks
 
+Note: This page has yet to be updated for release 0.4, which implemented a number of optimizations that are relevant to the n-body benchmark.
+
 This chapter contains results for a few preliminary toy benchmarks, all taken from {#{benchmark-game-link}#}. There's only three of them for now: {#{n-body-link}#}, {#{spectral-norm-link}#} and {#{binary-trees-link}#} (the complete list of benchmarks is available {#{benchmarks-list-link}#}). More will be added in the future.
 
 Here are the results (average of 10 runs, in seconds) on a single-core processor (the Cell version does not take advantage of multiple processors at the moment) compared to the fastest Java version (on the same single-core processor), which provides a floor for the Cell version since it's hard to beat an optimized Java program when compiling to Java:

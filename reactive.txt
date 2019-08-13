@@ -2,7 +2,7 @@ Reactive automata
 
 In this chapter we'll examine the other type of automata provided by the language. As already mentioned in the overview reactive automata should be regarded as a niche feature and at this stage also as an experimental one, whose design may change radically in the future. In order to explain how they work we'll make use of a simple automation problem, that is illustrated in the following picture:
 
-{#{mine-pump.svg}#}
+{<{<div><img src='mine-pump.svg' style='width:100%'></div>}>}
 
 In this example we need to pump water out of a mine sump. In order to detect the level of the water we have two sensors, {{L}} and {{H}}. We want to start pumping water out of the sump when it reaches the higher sensor, {{H}}, and continue until its level drops below the lower sensor, {{L}}. We also have three gas sensors to measure carbon monoxide ({{C}}), methane ({{M}}) and airflow ({{A}}) levels. If any of them becomes critical the operator must be alerted. Finally, in order to prevent explosions, the pump cannot be operated when the methane level exceeds a certain critical threshold.
 

@@ -2,7 +2,7 @@ Creating and using relational automata
 
 We're now going to see how relational automata are created and used. While we will focus here on how to do that in Cell, as opposed to doing it from the host language in mixed-language applications, all the commands we're going to describe have close equivalents in the interface of the generated code.
 
-Automata of either type can only be created inside procedures and not functions. A procedure can declare any number of automaton variables, but it cannot create automata dynamically: all automaton variables are instantiated when a procedure is called, and automatically destroyed when it returns. Automaton instances are also only visible inside the procedure they're declared in and they cannot be passed to other procedures.
+Automata of either type can only be created inside procedures and passed as arguments to other procedures, but not functions. A procedure can declare any number of automaton variables, but it cannot create them dynamically: all automaton variables are instantiated when a procedure is called, and automatically destroyed when it returns.
 
 In order to see how to use relational automata, we'll write a tiny command line tool that is actually useful in practice. Our application will create a relational automaton, read an initial state for it from a file and a list of messages from another, send each message to the automaton instance in the given order, and save its final state in another file. We'll make use of the {{Counter}} automaton we saw in the previous chapters, but the code can be made to work with any automaton type with only trivial changes.
 
@@ -10,10 +10,10 @@ In order to see how to use relational automata, we'll write a tiny command line 
     instance : Counter;
 
     // Checking the argument list
-    if |args| != 3:
+    if |args| != 3 {
       Print("Invalid arguments\n");
       return 1;
-    ;
+    }
     init_state_fname, msg_list_fname, final_state_fname = args;
 
     // Reading and checking the initial state
@@ -23,69 +23,68 @@ In order to see how to use relational automata, we'll write a tiny command line 
 
     // Making sure the value is a record
     // Without this check the code won't compile
-    if not init_state :: [Symbol -> Any]:
+    if not init_state :: [Symbol -> Any] {
       Print("Invalid initial state\n");
       return 1;
-    ;
+    }
 
     // Setting the initial state of the automaton
     ok = write instance <- init_state;
-    if not ok:
+    if not ok {
       Print("Invalid initial state\n");
       return 1;
-    ;
+    }
 
     // Reading and checking the message list
     res = ReadValueFromFile(msg_list_fname);
     return 1 if res == nothing;
     msg_list = value(res);
-    if not msg_list :: CounterMsg*:
+    if not msg_list :: CounterMsg* {
       Print("Invalid message list\n");
       return 1;
-    ;
+    }
 
     // Sending all messages in the list
-    for msg @ i <- msg_list:
+    for msg @ i <- msg_list {
       ok = instance <- msg;
-      if not ok:
+      if not ok
         Print("Message number " & _print_(i) & " failed\n");
-      ;
-    ;
+    }
 
     // Saving the final state
     final_state = read instance;
     ok = FileWrite(final_state_fname, untag(_print_(final_state)));
-    if not ok:
+    if not ok {
       Print("Could not write to file " & final_state_fname & "\n");
       return 1;
-    ;
+    }
 
     return 0;
   }
 
   Maybe[Any] ReadValueFromFile(String fname) {
     res = FileRead(fname);
-    if res == nothing:
+    if res == nothing {
       Print("Cannot read file " & fname & "\n");
       return nothing;
-    ;
+    }
 
     res = _parse_(string(value(res)));
-    if failed(res):
+    if failed(res) {
       Print("File " & fname & " does not contain a valid Cell value\n");
       return nothing;
-    ;
+    }
 
     return just(result(res));
   }
 
 The first line in the body of {{Main(..)}} is the declaration of the automaton variable {{instance}}, which looks like an ordinary variable declaration. Automaton variables are instantiated and initialized as soon as the procedure that hosts them is called, and their initial state is the one that is provided with the schema declaration, which in the case of {{Counter}} is just {{(value: 0, updates: 0)}}.
 
-The first step is to load the initial state for {{counter}} from the given file, check that it's a valid one using the runtime type check {{init_state :: Counter}} and set the state of {{instance}} with the command:
+The first step is to load the initial state for {{counter}} from the given file, check that it's a valid record using the runtime type check {{init_state :: [Symbol -> Any]}} and set the state of {{instance}} with the command:
 
   ok = write instance <- init_state;
 
-{{ok}} is a boolean variable that indicates whether the operation succeeded. Generally speaking, setting the state of an automaton instance can fail if the state that is provided is not a valid one. The typechecker tries to prevent you from using an invalid state in the first place, and that's why the {{init_state :: Counter}} check is actually necessary, but it doesn't verify that integrity constraints (which just means mutable relation variables' keys at the moment) are actually met, since that's rather hard to do with just a static analysis of the code, so those constraints are checked only when you actually try to set the state of an automaton instance.
+{{ok}} is a boolean variable that indicates whether the operation succeeded. It will fail if the provided value ({{init_state}}, in this case) is not a valid state for the target automaton. That cannot be checked at compile time, for two different reasons. First of all, a schema definition includes integrity constraints (keys and foreign keys) that would be hard to check at compile time. The other reason is related to persistence, and will be discussed in detail in the next paragraph.
 
 The state of any automaton can be set at any time, any number of times. It's just like setting the value of a variable of an atomic type (like booleans, integers or floating point numbers) in any other language. The next step is to load the list of messages and send them in the given order to {{instance}} with the instruction:
 

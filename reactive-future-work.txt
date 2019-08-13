@@ -56,7 +56,7 @@ Here's how you'll be able to express the same logic in some future version of Ce
       reading(SensorId)* : Maybe[Float];
 
     output:
-      err_count(SensorId) : NzNat;
+      err_count(SensorId) : Nat;
 
     state:
       err_count(SensorId) : Nat = 0;
@@ -95,7 +95,7 @@ External automata
 
 Let's go back to the mine sump example we used throughout our discussion of reactive automata. Let's say we want add a new input, a feedback signal from the pump that tells us if it's working properly or if there's a problem. Here's a revised picture:
 
-{#{mine-pump-2.svg}#}
+{<{<div><img src='mine-pump-2.svg' style='width:100%'></div>}>}
 
 In our code, we would have to add a new input to {{MineController}}:
 
@@ -299,13 +299,13 @@ There's a problem with this approach, though. To illustrate it, let's implement 
     counter = 2 * counter;
   }
 
-Unlike in {{reset}}, here the new value of {{counter}} depends on the previous one. If we start with {{value < max_value}}, {{on == true}} and {{counter == 1}}, what should be the value of {{counter}} after the execution of {{reset_and_decrement}}, {{2}}, {{3}} or {{4}}? Since the value of {{on}} goes from true to false, according to the reactive logic {{counter}} should be incremented. Should we apply both the increment and the doubling, or just the doubling? And if we apply both, in what order should we do it? Each of the three possible semantics would lead to a different result:
+Unlike in {{reset}}, here the new value of {{counter}} depends on the previous one. If we start with {{value < max_value}}, {{on == true}} and {{counter == 1}}, what should be the value of {{counter}} after the execution of {{reset_and_double}}, {{2}}, {{3}} or {{4}}? Since the value of {{on}} goes from true to false, according to the reactive logic {{counter}} should be incremented. Should we apply both the increment and the doubling, or just the doubling? And if we apply both, what order should we do it in? Each of the three possible semantics would lead to a different result:
 
   1 -> 2        // Ignoring reactive logic
   1 -> 2 -> 4   // Applying reactive logic before direct assignment
   1 -> 2 -> 3   // Executing direct assignment before reactive logic
 
-Generally speaking, none of the three possible semantics seem to be acceptable in all circumstances. Each of them may work in some situations but to lead to unexpected and buggy behavior in others.
+Generally speaking, none of the possible semantics seem to be acceptable in all circumstances. Each of them may work in some situations but leads to unexpected and buggy behavior in others.
 
 The most obvious solution to this problem is to simply reject direct updates if their semantics is inherently ambiguous, or if they can lead to unexpected behavior. Even with such constraints, direct updates would substantially increase the number of systems that can be modeled by reactive automata, and enable a clear separation between the reactive logic and the unusual, out-of-the-ordinary cases when the standard flow of control has to be bypassed.
 

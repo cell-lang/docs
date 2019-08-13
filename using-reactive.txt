@@ -23,7 +23,7 @@ To see how to use reactive automata, we'll write some test cases for some of the
   Main(String* args) {
     switch : Switch;
 
-    for switch_on, switch_off, exp_is_on <- switch_test_data:
+    for switch_on, switch_off, exp_is_on <- switch_test_data {
       // Setting the new values of the inputs for the next
       // propagation step. Internal state and outputs are
       // not affected at this stage.
@@ -36,27 +36,28 @@ To see how to use reactive automata, we'll write some test cases for some of the
 
       // Now checking that the state of the
       // only output is the expected one
-      if exp_is_on == nothing:
+      if exp_is_on == nothing {
         // Here we expect {{is_on}} to be undefined
-        if switch.is_on??:
+        if switch.is_on?? {
           Print("Error: output was supposed to be undefined\n");
           return;
-        ;
-      else
+        }
+      }
+      else {
         // First we check {{is_on}} is defined
-        if not switch.is_on??:
+        if not switch.is_on?? {
           Print("Error: output was supposed to be defined\n");
           return;
-        ;
+        }
         // Now we check that it has the expected value
-        if value(exp_is_on) != switch.is_on:
+        if value(exp_is_on) != switch.is_on {
           Print("Error: unexpected output value\n");
           return;
-        ;
-      ;
+        }
+      }
 
       Print("OK\n");
-    ;
+    }
   }
 
 The first thing you need to do with a new automaton instance is to set the value of all its continuous inputs. A failure to set any of them will be treated as a runtime error: the input will be left in an undefined state, which will be then propagated to all other signals that depend on it. At this stage, you should not try to set any discrete inputs, as that can be done only once the automaton has been initialized.
@@ -81,14 +82,13 @@ Let's now see an example of how to deal with discrete signals using another auto
     str = "line 1\nline 2\nline 3\nline4\n";
 
     // Feeding the input characters into the automaton
-    for ch <- untag(str):
+    for ch <- untag(str) {
       lines.char = ch;
       done = apply lines;
       // If the output {{line}} is active, we just print it
-      if lines.line?:
+      if lines.line?
         Print(lines.line & "\n");
-      ;
-    ;
+    }
   }
 
 Here the automaton instance is initialized before any input is set. That's because only continuous inputs should be set before initialization, and {{Lines}} has none. Once initialized, the automaton is fed characters from a test string. That's done in the first two lines of the loop. After each input character is processed we check to see if the {{line}} output is active and if it is we just print it. Checking whether a discrete output is active is syntactically similar to checking if it's defined, but with only one question mark at the end instead of two: {{instance.discrete_output?}}. Trying to read the value of a discrete output that is dormant has the same effect as trying to read an output that is in an undefined state: it triggers an exception that terminates the program. So in general in order to safely read the value of a discrete output you first have to check whether it's defined with {{instance.discrete_output??}} (this step was omitted in the example because we assumed {{line}} could never be undefined), then check if it's set with {{instance.discrete_output?}} and only after that you can safely read its value (with continuous outputs the second step is of course not necessary).
@@ -118,7 +118,7 @@ The process of updating an instance of a reactive automaton is a bit more comple
     // Initialization
     done = apply water_sensor;
 
-    for reading, time, exp_states <- water_sensor_test_data:
+    for reading, time, exp_states <- water_sensor_test_data {
       // Setting the value of the only input
       water_sensor.raw_reading = reading;
 
@@ -129,20 +129,20 @@ The process of updating an instance of a reactive automaton is a bit more comple
       // Updating {{water_sensor}} and recording all
       // the intermediate values of the only output
       states = ();
-      loop
+      do
         done = apply water_sensor;
         states = (states | water_sensor.sensor_state);
       while not done;
 
       // Checking that the states of the sensor are
       // the expected ones
-      if states != exp_states:
+      if states != exp_states {
         Print("Error\n");
         return;
+      }
       else
         Print("OK\n");
-      ;
-    ;
+    }
   }
 
 The {{elapsed}} command is used to provide the time information. Reactive automata don't actively try to keep track of time: instead, time is treated more like a sort of implicit input (albeit one with very special characteristics) that the client has to explicitly set before updating an automaton instance with {{apply}}. The first argument of {{elapsed}} is an automaton instance, and the second one is the number of milliseconds that have passed since the last time the instance was updated. If you don't explicitly provide that piece of information the internal clock of the automaton is not updated, and from the automaton perspective it's as if no time at all had passed since the last update. Note that you don't have to and actually cannot use the {{elapsed}} command before an automaton instance is initialized, as initialization is regarded as time zero.

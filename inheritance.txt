@@ -26,28 +26,28 @@ The type {{Employee}} is the superset of all employee types, and {{AnyCommission
     next_employee_id : Nat = 0;
 
     // Shared attributes of all employees
-    employee(Employee):
+    employee(Employee)
       first_name  : String,
       last_name   : String,
       ssn         : String;
 
     // Attributes of salaried employees
-    employee(SalariedEmployee):
+    employee(SalariedEmployee)
       weekly_salary : Money;
 
     // Attributes of hourly employees
-    employee(HourlyEmployee):
+    employee(HourlyEmployee)
       hourly_wage  : Money,
       hours_worked : Float;
 
     // Attributes of all employees that earn commissions,
     // including those with base salary + commissions
-    employee(AnyCommissionEmployee):
+    employee(AnyCommissionEmployee)
       gross_sales     : Money,
       commission_rate : Float;
 
     // Attributes of employees with base salary + commissions
-    employee(BasePlusEmployee):
+    employee(BasePlusEmployee)
       base_salary : Money;
   }
 
@@ -58,14 +58,14 @@ As usual, our schema declaration makes use of a lot of syntactic sugar. It's com
     next_employee_id : Nat = 0;
 
     // Salaried employees and their attributes
-    employee(SalariedEmployee):
+    employee(SalariedEmployee)
       first_name    : String,
       last_name     : String,
       ssn           : String,
       weekly_salary : Money;
 
     // Hourly employees and their attributes
-    employee(HourlyEmployee):
+    employee(HourlyEmployee)
       first_name    : String,
       last_name     : String,
       ssn           : String,
@@ -73,7 +73,7 @@ As usual, our schema declaration makes use of a lot of syntactic sugar. It's com
       hours_worked  : Float;
 
     // Commissions-only employees and their attributes
-    employee(CommissionEmployee):
+    employee(CommissionEmployee)
       first_name      : String,
       last_name       : String,
       ssn             : String,
@@ -81,7 +81,7 @@ As usual, our schema declaration makes use of a lot of syntactic sugar. It's com
       commission_rate : Float;
 
     // Employees with base salary + commissions and their attributes
-    employee(BasePlusEmployee):
+    employee(BasePlusEmployee)
       first_name      : String,
       last_name       : String,
       ssn             : String,

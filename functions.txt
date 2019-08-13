@@ -615,6 +615,20 @@ In the above example, {{isort(..)}} is a family of polymorphic functions defined
   // same bit pattern reinterpreted as a 64-bit integer
   Int _bits_(Float)
 
+There's also a number of builtin functions that are used to efficiently manipulate sets and maps. They all run in O(log(N)):
+
+  // Inserts an element into a set
+  [T] _insert_([T] set, T elt);
+
+  // Removes an element from a set
+  [T] _remove_([T] set, T elt);
+
+  // Inserts a key-value pair into a map
+  [K -> V] _put_([K -> V] map, K key, V value);
+
+  // Removes a key and its associated value from a map
+  [K -> V] _drop_([K -> V] map, K key);
+
 
 Polymorphic functions
 

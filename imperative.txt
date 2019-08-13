@@ -4,30 +4,26 @@ Functions can also be written using a procedural syntax. The following function 
 
   Int count_non_zero(Int* xs) {
     count = 0;
-    for x <- xs:
-      if x != 0:
+    for x <- xs
+      if x != 0
         count = count + 1;
-      ;
-    ;
     return count;
   }
 
-When using the procedural syntax, the body of the function is, instead of an expression, just a number of statements written between braces. Here we see four types of statements: assignments, returns, conditionals and for loops. All statements, including composite ones, are terminated by a semicolon (the two standalone semicolons above terminate the if and for statements respectively). If the body of an if statements contains a single atomic statements, you can more succinctly write it in postfix notation: the {{count_non_zero(..)}} function can be rewritten as follows:
+When using the procedural syntax, the body of the function is, instead of an expression, just a number of statements written between braces. Here we see four types of statements: assignments, returns, conditionals and for loops. The body of a composite statements is enclosed in braces, unless it consists of a single statements, in which case the braces are optional. Simple if statements can also written in postfix notation: the {{count_non_zero(..)}} function can be rewritten as follows:
 
   Int count_non_zero(Int* xs) {
     count = 0;
-    for x <- xs:
+    for x <- xs
       count = count + 1 if x != 0;
-    ;
     return count;
   }
 
 The for loop iterates through the sequence {{xs}} storing the current element in {{x}}. For loops can make use of index variables and tuple destructuring just like sequence comprehension. The following function for example takes a sequence of integer pairs, and returns the index of the first pair whose elements are equal, wrapped as a maybe type:
 
   Maybe[Nat] index_of_first_equal_pair((Int, Int)* ps) {
-    for x, y @ i <- ps:
+    for x, y @ i <- ps
       return :just(i) if x == y;
-    ;
     return :nothing;
   }
 
@@ -36,30 +32,38 @@ All the above for loops are actually "foreach" loops: they traverse a sequence a
   B foldr(A* xs, B y0, (A B -> B) f) {
     y = y0;
     len = |xs|;
-    for i < len:
+    for i < len {
       x = xs(len-i-1);
       y = f(x, y);
-    ;
+    }
     return y;
   }
 
 The body of the for loop above is executed {{len}} times, with the value of the loop variable {{i}} going from 0 to {{len-1}}. It's basically the equivalent of {{for (int i=0 ; i < len ; i++)}} in C or Java. The for loop has a number of different forms, listed here with their C/Java equivalent:
 
-  for i <= count:     // for (i=0 ; i <= count ; i++)
-  for i = m..n:       // for (i=m ; i < n ; i++)
-  for i = m...n:      // for (i=m ; i <= n ; i++)
+  for i <= count {    // for (i=0 ; i <= count ; i++) {
+    ...               //   ...
+  }                   // }
+
+  for i = m..n {      // for (i=m ; i < n ; i++) {
+    ...               //   ...
+  }                   // }
+
+  for i = m...n {     // for (i=m ; i <= n ; i++) {
+    ...               //   ...
+  }                   // }
 
 Both "for" and "foreach" loops can be combined: this is a (lame and very inefficient) function that looks for duplicates in a sequence:
 
   T* duplicates(T* s) {
     ds = ();
-    for x @ i <- s; j = i+1..|s|:
+    for x @ i <- s; j = i+1..|s| {
       y = s(j);
-      if x == y:
+      if x == y {
         ds = (ds | x);
         break;
-      ;
-    ;
+      }
+    }
     return ds;
   }
 
@@ -67,15 +71,14 @@ It's completely equivalent to this second version, which doesn't combine loops:
 
   T* duplicates(T* s) {
     ds = ();
-    for x @ i <- s:
-      for j = i+1..|s|:
+    for x @ i <- s
+      for j = i+1..|s| {
         y = s(j);
-        if x == y:
+        if x == y {
           ds = (ds | x);
           break;
-        ;
-      ;
-    ;
+        }
+      }
     return ds;
   }
 
@@ -87,15 +90,16 @@ While loops behave as expected. This is a function that merges two sequences of 
     zs = ();
     i = 0;
     j = 0;
-    while i < |xs| or j < |ys|:
-      if i == |xs| or (j < |ys| and ys(j) < xs(i)):
+    while i < |xs| or j < |ys| {
+      if i == |xs| or (j < |ys| and ys(j) < xs(i)) {
         zs = (zs | ys(j));
         j = j + 1;
-      else
+      }
+      else {
         zs = (zs | xs(i));
         i = i + 1;
-      ;
-    ;
+      }
+    }
     return zs;
   }
 
@@ -103,18 +107,17 @@ There's also special syntax for infinite loops, that have to be explicitly termi
 
   T fixpoint(T x, (T -> T) f) {
     last = x;
-    loop
+    loop {
       next = f(last);
       return next if next == last;
-    ;
+    }
   }
 
 The {{fail}} statement is for statements what {{undefined}} is for expressions: it throws an exception. It doesn't take any argument. The following function returns the index of the first occurrence of an element in the sequence, or fails if the sequence doesn't contain such an element:
 
   Nat index_first(Any e, Seq s) {
-    for x @ i <- s:
+    for x @ i <- s
       return i if x == e;
-    ;
     fail;
   }
 
@@ -143,9 +146,8 @@ That comes in handy when you need a function to return multiple values:
   (Int*, RandGen) random_int_seq(RandGen init_gen, Nat length) {
     r = ();
     g = init_gen;
-    for i < length:
+    for i < length
       x, g = random_int(g);
-    ;
     return (r, g);
   }
 
@@ -167,17 +169,15 @@ The syntax for "procedural" functions we've seen so far is just a tiny bit of sy
 
   Int sum(Int* xs) {
     s = 0;
-    for x <- xs:
+    for x <- xs
       s = s + x;
-    ;
     return s;
   }
 
   Int sum(Int* xs) = {
     s = 0;
-    for x <- xs:
+    for x <- xs
       s = s + x;
-    ;
     return s;
   };
 
@@ -194,10 +194,10 @@ Normally you don't need to declare the variables used in a procedural block, as 
     l : List[T];
 
     l = :empty_list;
-    for i < |xs|:
+    for i < |xs| {
       x = xs(|xs|-i-1);
       l = :list(x, l);
-    ;
+    }
     return l;
   }
 
@@ -226,14 +226,14 @@ Going back to the functional insertion, the runtime needs to make a copy of the 
 
   T* concat(T* s1, T* s2) {
     res = s1;
-    for x <- s2:
+    for x <- s2 {
       unused = (res | x);
       // The following instruction causes the reallocation
       // of the underlying array at every iteration of the
       // loop because the previous (useless) instruction
       // has already allocated the next slot
       res = (res | x);
-    ;
+    }
     return res;
   }
 
@@ -241,9 +241,8 @@ Once you remove the faulty instruction, the function runs in O(N1+N2), as you wo
 
   T* join(T** seqs) {
     res = ();
-    for s <- seqs:
+    for s <- seqs
       res = _cat_(res, s);
-    ;
     return res;
   }
 
@@ -252,28 +251,40 @@ If you were to concatenate those shorter sequences to the left, on the other han
   T* very_bad_join(T** seqs) {
     n = |seqs|;
     res = ();
-    for i = 1...n:
+    for i = 1...n {
       s = seqs(n-i);
       res = _cat_(s, res);
-    ;
+    }
     return res;
   }
 
-The language also includes a second pseudo-imperative operation, the sequence update, but it hasn't been fully implemented yet. Here's an example:
+
+Imperative update of sequences
+
+In some very specific circumstances, it's also possible to imperatively update sequences, without giving up any of the desirable properties of functional programming. Here's an example:
 
   // reverse_permutation((1, 2, 4, 0, 3)) == (3, 0, 1, 4, 2)
   // reverse_permutation((3, 0, 1, 4, 2)) == (1, 2, 4, 0, 3)
   Nat* reverse_permutation(Nat* p) {
+    rp : Nat*;
+
     rp = (0 : i < |p|);
-    for x @ i <- p:
+    for x @ i <- p
       rp(x) := i;
-    ;
     return rp;
   }
 
-A statement of the form {{xs(i) := x;}} is a functional sequence update: conceptually, it is completely equivalent to the following code (provided of course that there's no existing variable named {{xj}} or {{j}} in the current scope):
+A statement of the form {{xs(i) := x;}} is a sequence update: conceptually, it is completely equivalent to the following code (provided of course that there's no existing variable named {{xj}} or {{j}} in the current scope):
 
   fail if i < 0 or i >= |xs|;
   xs = (if j == i then x else xj : xj @ j <- xs);
 
-And that's exactly how it is currently implemented. But in cases like the one above, it would be pretty easy for the compiler to figure out that at the time of the assignment {{rp}} is the only reference to that particular sequence, in which case the underlying object can be updated directly, in O(1), without any side effects. Of course, there are limits to what even a mildly sophisticated compiler can be expected to be able to infer from a static analysis of the code: such a uniqueness analysis is easy when a sequence is created and updated inside a single function; it can still be doable, in some simple cases, even if the sequence is juggled between different functions: in the case of {{reverse_permutation(..)}}, for example, it's easy to figure out that the returned object is not aliased, so the caller can still update it in place. I'll document the details once such analysis is implemented: it will probably be done in stages, starting with the simplest cases. For the time being, just don't use this feature unless you're dealing with really tiny sequences.
+But that's not how it is implemented. In a function like {{reverse_permutation(..)}} it's pretty easy for the compiler to figure out that at the time of the assignment {{rp}} is the only reference to that particular sequence, in which case the underlying data structures can be updated destructively, in O(1), without any side effects. The compiler accepts such an assignment only if it's sure that it is semantically equivalent to making a mutated copy of the target sequence.
+
+The implementation of this feature is a work in progress, and at the moment the compiler is unnecessarily restrictive. A sequence can be updated imperatively only if it's a local variable (not a function/method argument) whose type has been explicitly declared. It has to be allocated using either a sequence comprehension expression or a range comprehension one like for example the following ones:
+
+  ys = (f(x) : x <- xs);
+  ys = (g(x, i) : x @ i <- xs, p(x, i));
+  ys = (f(i) : i < n);
+
+Moreover, the only permitted operations are accessing its elements individually ({{ys(i)}}), reading its length ({{|ys|}}), appending elements to it ({{ys = (ys | y);}}) and of course updating it ({{ys(i) := ...;}}). Do anything else, like for example passing it as argument to another function, or using it to create another value, and from that point in the code on, you won't be able to mutate it any more.

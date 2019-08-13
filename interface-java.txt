@@ -24,7 +24,7 @@ For data types that are not in the above table, the compiler tries to generate a
   type List[T] = empty_list, list(T, List[T]);
 
   schema DrawingBoard {
-    ref_point(Point):
+    ref_point(Point)
       shapes : List[Shape];
   }
 
@@ -61,15 +61,15 @@ Let's take a look at the interface of the classes produced by the compilation of
 
 {#{java/counter.html}#}
 
-As you can see, the generated Java class has the same name of the Cell automaton it derives from, and it belongs to the {{net.cell_lang}} package. The first three methods, {{readState()}}, {{setState(..)}} and {{execute(..)}}, are the same for all relational automata. All other methods are just accessors that are specific to a particular automaton, and can be used to read pieces of its state, or to invoke its methods.
+As you can see, the generated Java class has the same name of the Cell automaton it derives from, and it belongs to the {{net.cell_lang}} package. The first three methods, {{load(..)}}, {{save(..)}} and {{execute(..)}}, are the same for all relational automata. All other methods are just accessors that are specific to a particular automaton, and can be used to read pieces of its state, or to invoke its methods.
 
-The {{readState()}} method is the equivalent of the {{read}} instruction in Cell: it takes a snapshot of the state of the automaton and returns it as a {{net.cell_lang.Value}} object. Saving the state of an automaton to a file in text form can be done with the instruction {{counter.readState().print(writer);}}, where {{writer}} is a valid instance of {{java.io.Writer}}.
+The {{save(..)}} method is the equivalent of the {{read}} instruction in Cell, in that it takes a snapshot of the state of the automaton, which is written to the provided {{java.io.Writer}} object. The state is saved in the standard text format used for all Cell values.
 
-{{setState(..)}} is used to set the state of an automaton instance, and is the equivalent of the {{write}} instruction in Cell. It can be used at any time in the life of the automaton instance, any number of times. The new state has to be provided in text form. Here's an example:
+{{load(..)}} is used to set the state of an automaton instance, which is read from a {{java.io.Reader}} object, and is the equivalent of the {{write}} instruction in Cell. It can be used at any time in the life of the automaton instance, any number of times. The new state has to be provided in the standard text format. Here's an example:
 
 {#{java/set-state.html}#}
 
-If the provided state is not a valid one, {{setState(..)}} will throw an exception. In that case, the automaton instance will just retain the state it had before, and will still be perfectly functional.
+If the provided state is not a valid one, {{load(..)}} will throw an exception. In that case, the automaton instance will just retain the state it had before, and will still be perfectly functional.
 
 {{execute(..)}} is used to send the automaton a message, which has to be passed in text form. A few examples:
 
@@ -78,19 +78,19 @@ If the provided state is not a valid one, {{setState(..)}} will throw an excepti
   counter.execute("reset");
   counter.execute("reset(-1)");
 
-Errors handling works in the same way as with {{setState()}}. If an error occurs an exception will be thrown, but the automaton will remain fully operational, and its state will be left untouched.
+Errors handling works in the same way as with {{load(..)}}. If an error occurs an exception will be thrown, but the automaton will remain fully operational, and its state will be left untouched.
 
 The two methods {{value()}} and {{updates()}} are {{Counter}}-specific accessors that return the values of the {{value}} and {{updates}} member variables respectively. Note that the types of such variables is just {{Int}}, which can be mapped directly to {{long}} in Java, with no need to use {{net.cell_lang.Value}}.
 
-If you don't want those automatically generated methods, just use the {{-nag}} flag when running the Cell compiler.
+Accessors for member and mutable relation variables are not generated automatically: if you want them just use the {{-g}} flag when running the Cell compiler.
 
 Let's now take a look at a more complex automaton, {{Supply}}. Here's the declaration of the generated Java class:
 
 {#{java/supply.html}#}
 
-The first three methods of the {{Supply}} class, {{readState()}}, {{setState(..)}} and {{execute(..)}}, are the same as before. The next two (both named {{lowestPriceSuppliers(..)}}) are just the compiled Java version of the corresponding Cell methods of the {{Supply}} automaton.
+The first three methods, {{load(..)}}, {{save(..)}} and {{execute(..)}}, are the same as before. The next two (both named {{lowestPriceSuppliers(..)}}) are just the compiled Java version of the corresponding Cell methods of the {{Supply}} automaton.
 
-Everything else is just automatically generated accessors for the data stored by the automaton. Again, if don't want them just use the {{-nag}} option when compiling.
+Everything else is just automatically generated accessors for the data stored by the automaton. Again, they are generated only if you use the {{-g}} flag when compiling.
 
 The two methods {{nextPartId()}} and {{nextSupplierId()}} are just accessors for the corresponding member variables, just like {{value()}} and {{updates()}} in {{Counter}}.
 

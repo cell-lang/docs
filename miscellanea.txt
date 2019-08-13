@@ -57,9 +57,8 @@ Protocols can define more than one type. The protocol in the following example d
 
   StateM run_all(StateM init_state, Msg* msgs) {
     state = init_state;
-    for m <- msgs:
+    for m <- msgs
       state = run(state, m);
-    ;
     return state;
   }
 
@@ -105,10 +104,10 @@ It's rather common for functions to need arguments that they don't use directly,
   }
 
   PrintRecords(PersonData* ps) {
-    for p <- ps:
+    for p <- ps {
       str = format_person_data(p, locale=:en_us);
       Print(str & "\n");
-    ;
+    }
   }
 
 {{format_date(..)}} and {{format_person_data(..)}} are defined inside an implicit block. All functions defined inside such a block acquire the implicit arguments that are declared after the {{implicit}} keyword. In this case there's just one argument, {{locale}}, of type {{Locale}}, but an implicit block can have any number of arguments, separated by commas:
@@ -142,23 +141,23 @@ This is somewhat reminiscent of what happens in object-oriented languages with t
 In a block of procedural code where several function calls need the same implicit arguments you can set them once and for all using the {{let}} statement. {{PrintRecords(..)}}, for instance, can be rewritten as follow:
 
   PrintRecords(PersonData* ps) {
-    let locale = :en_us:
-      for p <- ps:
+    let locale = :en_us {
+      for p <- ps {
         str = format_person_data(p);
         Print(str & "\n");
-      ;
-    ;
+      }
+    }
   }
 
 Here {{:en_us}} is used as a default value for the implicit argument {{locale}} in all function calls that need it inside the body of the let statement. Any number of implicit arguments can be set in a single let statement, and of course let statements can be nested:
 
-  let impl_arg_1 = value1, impl_arg_2 = value2:
+  let impl_arg_1 = value1, impl_arg_2 = value2 {
     ...
-    let impl_arg_3 = value3:
+    let impl_arg_3 = value3 {
       ...
-    ;
+    }
     ...
-  ;
+  }
 
 
 
@@ -173,9 +172,8 @@ Constants in Cell are automatically cached, even when they are the result of an 
 
   Int const_ints_sum {
     sum = 0;
-    for x <- const_ints:
+    for x <- const_ints
       sum = sum + x;
-    ;
     return sum;
   }
 

@@ -20,22 +20,22 @@ Relational automata are meant to be rather large data structures, storing data a
     next_buyer_id     : Nat = 0;
     next_listing_id   : Nat = 0;
 
-    author(AuthorId):
+    author(AuthorId)
       name : String;
 
-    book(BookId):
-      title : String,
-      isbn  : String,
-      by+   : AuthorId,
+    book(BookId)
+      title        : String,
+      isbn         : String,
+      by+          : AuthorId,
       listed_price : Money;
 
-    seller(SellerId):
+    seller(SellerId)
       name : String;
 
-    buyer(BuyerId):
+    buyer(BuyerId)
       name : String;
 
-    listing(ListingId):
+    listing(ListingId)
       seller_id : SellerId,
       book_id   : BookId,
       condition : BookCondition,
@@ -51,10 +51,10 @@ If one wanted to somehow partition the information contained in {{BookMarket}}, 
     next_author_id : Nat = 0;
     next_book_id   : Nat = 0;
 
-    author(AuthorId):
+    author(AuthorId)
       name : String;
 
-    book(BookId):
+    book(BookId)
       title : String,
       isbn  : String,
       by+   : AuthorId,
@@ -65,17 +65,17 @@ If one wanted to somehow partition the information contained in {{BookMarket}}, 
     next_seller_id : Nat = 0;
     next_buyer_id  : Nat = 0;
 
-    seller(SellerId):
+    seller(SellerId)
       name : String;
 
-    buyer(BuyerId):
+    buyer(BuyerId)
       name : String;
   }
 
   schema Market : Publishing, Actors {
     next_listing_id : Nat = 0;
 
-    listing(ListingId):
+    listing(ListingId)
       seller_id : SellerId,
       book_id   : BookId,
       condition : BookCondition,
@@ -148,22 +148,3 @@ Here too the following code will be rejected:
 The same rules apply to methods: a method call will be bound to the dependant's copy if such a copy exists, or to the dependee's otherwise. Similarly, if a method is defined in more than one dependee but not in the dependant any reference to it will be rejected. Methods with the same name but different arities are considered distinct though, so no ambiguities arise in that case.
 
 Dependees are totally oblivious to the existence of dependants, so they cannot access their variables or methods in any way, and neither can the semantics of their methods be affected in any way by the presence of dependants: again, this is not inheritance, and there's no overriding of any sort going on here.
-
-
-Nested automata
-
-Relational automata can not only be wired together, but also nested inside one another. Here's an example:
-
-  schema CounterPair {
-    counter_1 : Counter;
-    counter_2 : Counter;
-  }
-
-It defines a new automaton, {{CounterPair}}, which contains two instances the {{Counter}} automaton defined earlier. When {{CounterPair}} is instantiated, the two nested instances of {{Counter}} are automatically created as well, bound to the {{counter_1}} and {{counter_2}} fields. This is a sample value for the state of {{CounterPair}}:
-
-  ( counter_1: (value: 1, updates: 1),
-    counter_2: (value: 0, updates: 0)
-  )
-
-As you can see, the state of nested automata simply becomes part of the state of their parent, and can be updated only as part of an update of the state of their parent. We'll say more about that when we talk about updates and message handlers in the next chapter.
-Just like mutable relation variables, and automaton variables in general, nested automata cannot be aliased, that is, variables like {{counter_1}} and {{counter_2}} cannot be copied and are in general subject to the same limitations that apply to mutable relation variables. The fields/member variables of nested automata, on the other hand, can be accessed (using the familiar {{counter_1.value}} syntax) just like the fields of their parents: with no restrictions for ordinary member variables, and with all the restrictions that apply in the case of mutable relation variables.

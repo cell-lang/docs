@@ -26,7 +26,7 @@ In order to create something equivalent in Cell, we'll need to define a relation
 
     // Users and their attributes
     // {{username}} must be unique, and {{date_of_birth}} is optional
-    user(UserId):
+    user(UserId)
       username       : String [unique],
       signup_date    : Date,
       first_name     : String,
@@ -34,7 +34,7 @@ In order to create something equivalent in Cell, we'll need to define a relation
       date_of_birth? : Date;
 
     // Chat groups and their attributes
-    chat_group(GroupId):
+    chat_group(GroupId)
       name  : String,
       admin : UserId;
 
@@ -44,7 +44,7 @@ In order to create something equivalent in Cell, we'll need to define a relation
 
     // Membership relationship between users
     // and groups, and its attributes
-    member(UserId, GroupId):
+    member(UserId, GroupId)
       joined_on : Date,
       karma     : Int;
 
@@ -57,8 +57,8 @@ In order to create something equivalent in Cell, we'll need to define a relation
     // with its only attribute. The relation is
     // declared symmetric, the order in which the
     // user identifiers are stored doesn't matter
-    friends(UserId | UserId):
-      since : Date;
+    friends(UserId | UserId)
+      since : Time;
 
     // The {{friends}} relation can only reference valid users
     friends(u1, u2) -> user(u1), user(u2);
@@ -76,7 +76,7 @@ Entities, attributes and methods
 
 The first line in the body of {{OnlineForum}} is the declaration of the member variable {{next_id}}, which is just a counter that is read and incremented every time we need to create a new user or chat group id. Nothing new there. The lines that follow are more interesting: they declare the data structures that hold basic information about users:
 
-  user(UserId):
+  user(UserId)
     username       : String [unique],
     signup_date    : Date,
     first_name     : String,
@@ -127,7 +127,7 @@ Syntactic sugar
 
 Let's now go back to the syntactically sugared version of the schema/automaton. The following declaration:
 
-  user(UserId):
+  user(UserId)
     username       : String [unique],
     signup_date    : Date,
     first_name     : String,
@@ -136,7 +136,7 @@ Let's now go back to the syntactically sugared version of the schema/automaton. 
 
 is just a more convenient and concise way of declaring all the unsweetened relations above. The question mark that follows the {{date_of_birth}} field qualifies it as optional. You can also declare "multivalued" attributes using the syntactically sugared notation. In the following code, for example:
 
-  user(UserId):
+  user(UserId)
     ... // Same as before
     phone_number*  : String;
 
@@ -146,7 +146,7 @@ the {{phone_number}} attribute can have any number of values (including zero). T
 
 You can also tag an attribute with a {{+}} sign, which marks it as a mandatory multivalued attribute, that is, one that must have at least one value, and can have more than one.
 
-  user(UserId):
+  user(UserId)
     ...
     phone_number+  : String;
 
@@ -169,7 +169,7 @@ Relationships and their attributes
 
 The next set of relations store the information on which chat groups each user has joined:
 
-  member(UserId, GroupId):
+  member(UserId, GroupId)
     joined_on : Date,
     karma     : Int;
 
@@ -195,8 +195,8 @@ Symmetric relations
 
 Finally, we have the {{friends}} relation and its only attribute, {{since}}:
 
-  friends(UserId | UserId):
-    since : Date;
+  friends(UserId | UserId)
+    since : Time;
 
 This is how it would look without syntactic sugar:
 
@@ -204,9 +204,9 @@ This is how it would look without syntactic sugar:
   friends(UserId | UserId);
 
   // Users #0 and #1 have been online friends since #2
-  since(UserId | UserId, Date);
+  since(UserId | UserId, Time);
 
-{{friends}} look similar to {{member}}, with the only difference being that its two arguments are separated by a vertical bar instead of a comma, which tells the compiler that the {{friends}} relation is symmetric. Without that, the fact that users {{u1}} and {{u2}} are online friends could be recorded as either the {{u1, u2}} or {{u2, u1}} entry inside {{friends}}, or even both of them. That would of course be a problem, because it would force us to account for both possibilities when checking if two users are friends or when deleting such fact from the dataset, thereby making our code more complex and error prone than it needs to be. The problem would be even worse for the {{since}} relation, as it could end up with two conflicting facts inside it: {{u1, u2, d1}} and {{u2, u1, d2}}. By declaring the arguments of {{friends}} and the first two arguments of {{since}} symmetric, all these issues will be automatically deal with by the compiler whenever we read the dataset, and insert, update or delete the data in it.
+{{friends}} look similar to {{member}}, with the only difference being that its two arguments are separated by a vertical bar instead of a comma, which tells the compiler that the {{friends}} relation is symmetric. Without that, the fact that users {{u1}} and {{u2}} are online friends could be recorded as either the {{u1, u2}} or {{u2, u1}} entry inside {{friends}}, or even both of them. That would of course be a problem, because it would force us to account for both possibilities when checking if two users are friends or when deleting such fact from the dataset, thereby making our code more complex and error prone than it needs to be. The problem would be even worse for the {{since}} relation, as it could end up with two conflicting facts inside it: {{u1, u2, t1}} and {{u2, u1, t2}}. By declaring the arguments of {{friends}} and the first two arguments of {{since}} symmetric, all these issues will be automatically deal with by the compiler whenever we read the dataset, and insert, update or delete the data in it.
 
 
 Messages and message handlers
@@ -245,15 +245,14 @@ Let's start by defining the message and message handler pairs that add a new use
     insert signup_date(id, this.signup_date);
 
     // Setting the (optional) {{date_of_birth}} attribute, if available
-    if this.date_of_birth?:
+    if this.date_of_birth?
       insert date_of_birth(id, this.date_of_birth);
-    ;
   }
 
 The first declarations defines the type of the message, which is basically just a record containing all the information about a new user. The {{date_of_birth}} field is optional. The second declaration defines the message handler, which is pretty straightforward, just a bunch of insert statements, one of which is conditional since {{date_of_birth}} is optional. The only thing to note is the {{this}} keyword that is used to access the value of the message. There's also some syntactic sugar for the {{insert}} statement. The above message handler can be rewritten more tersely as follows:
 
   OnlineForum.AddUser {
-    insert user(this.id):
+    insert user(this.id)
       username      = this.username,
       first_name    = this.first_name,
       last_name     = this.last_name,
@@ -274,18 +273,18 @@ Adding new chat groups, memberships and friendships is very similar to adding us
     // If the user is the administrator of one or more chat groups,
     // we need to choose a new administrator for them, or delete
     // them altogether, if there's nobody left
-    for g <- admin(?, id):
+    for g <- admin(?, id) {
       members = [u : u <- member(?, g), u != id];
-      if members != []:
+      if members != [] {
         // The new administrator is randomly chosen
         // among all members with the highest karma
         new_admin = any(max_by(members, karma($, g)));
         update admin(g, new_admin);
+      }
       else
         // No members left, deleting the group
         delete chat_group(g);
-      ;
-    ;
+    }
   }
 
 Here we've used a bit of syntactic sugar to avoid an explicit type definition like the {{type AddUser = ...}} we saw previously. The following definition:
@@ -334,7 +333,7 @@ While it is possible to build a complete application with it, Cell is designed t
 
 {#{code/interfaces.html}#}
 
-Let's start with the pair of complementary methods {{readState()}} and {{setState()}}. The former takes a snapshot of the state of an automaton, and returns it as an object of type {{net.cell_lang.Value}}, which is a class that can represent any Cell value. The returned states can be freely inspected and, for example, printed or stored to a file. {{setState(..)}} erases the current state of the automaton and sets its new state to whatever value is provided as argument (as long as that's a valid state for the automaton in question, of course). The argument is provided as a string containing the standard textual Cell representation of the new state. Any state returned by {{readState()}} can be used, once it has been converted to text (using the standard Java {{toString()}} method), as input for {{setState(..)}}, which makes it very easy to save the data stored inside an automaton to a file, and then read it back later.
+Let's start with the pair of complementary methods {{load(..)}} and {{save(..)}}. The latter save a snapshot of the state of the automaton to a {{java.io.Writer}} object. The state of the automaton is saved in Cell's standard textual format, so that is can be manually inspected and modified. The {{load(..)}} method, on the other hand, erases the current state of the automaton and loads a new state from the provided {{java.io.Reader}}, as long as that's a valid state for the automaton in question. The new state must be in the same text format used by the {{save(..)}} method. If the load operation fails, for whatever reason, the state of the automaton is left unchanged. Loading a previously saved state results in an identical copy of the original automaton, that will pick up where the original left off, and behave in the exact same way.
 
 The next method, {{execute(..)}}, is used to send a message to the automaton. Here too the message is provided as a string containing its standard textual representation. If an error occurs during the execution of the message handler an exception is thrown, and the state of the automaton is left unchanged, as we've already mentioned before.
 
@@ -346,14 +345,14 @@ Here's an example of what a valid {#{online-forum-state-link}#} for the {{Online
 
 All the remaining methods are specific to each type of automaton, and they're all read-only. In this case, there's just {{string fullName(long)}} and {{long usersWhoSignedUpOn(Date)}} which, as you would expect, are used to invoke the corresponding methods of the {{OnlineForum}} automaton.
 
-The only thing left to mention is the fact that, in order for the generated code to interface smoothly with hand-written Java code, the Cell compiler tries to map each Cell type that appears in the interface of an automaton to a standard Java type or to generate a corresponding Java class for it: in the rare cases in which that fails, the corresponding piece of data is either returned as a {{net.cell_lang.Value}} object, when data moves from Cell to Java, or passed in as a string containing the textual representation of a Cell value when going in the other direction. The details of the mapping are described in detail in another chapter.
+The only thing left to mention is the fact that, in order for the generated code to interface smoothly with hand-written Java code, the Cell compiler tries to map each Cell type that appears in the interface of an automaton to a standard Java type or to generate a corresponding Java class for it: in the rare cases in which that fails, the corresponding piece of data is either returned as a {{net.cell_lang.Value}} object, when data moves from Cell to Java, or passed in as a string containing the textual representation of a Cell value when going in the other direction. The details of the mapping are described in another chapter.
 
 
 Auto-generated methods and message handlers
 
 The Cell compiler can also, if you want it to, automatically generate a number of accessor methods that give you direct access to the data stored inside your automata. It generates methods to read the value of member variables, or the entire content of a relation; to check if a relation contains a given tuple (or element, for unary relations); and finally, in the case of binary relations, to lookup the value of an attribute of a specific entity given its id.
 
-For each automaton there's also a number of message handlers (mainly those that are used to insert data into it, like {{AddUser}} we saw before) that are almost invariably needed, but whose structure is so predictable that the compiler can generate them automatically. That way, we can avoid polluting the codebase with boring boilerplate code, and leave the developer free to concentrate on the interesting part of the application's logic. Automatic generation of messages and message handlers will be implemented either in the next (0.4) version of the compiler, or the one after that.
+For each automaton there's also a number of message handlers (mainly those that are used to insert data into it, like {{AddUser}} we saw before) that are almost invariably needed, but whose structure is so predictable that the compiler can generate them automatically. That way, we can avoid polluting the codebase with boring boilerplate code, and leave the developer free to concentrate on the interesting part of the application's logic. Automatic generation of messages and message handlers will be implemented in one of the next versions of the compiler.
 
 
 Inheritance hierarchies and polymorphism
@@ -385,28 +384,28 @@ The type definitions above are very similar to {{UserId}} and {{GroupId}} we saw
     next_employee_id : Int = 0;
 
     // Shared attributes of all employees
-    employee(Employee):
+    employee(Employee)
       first_name  : String,
       last_name   : String,
       ssn         : String;
 
     // Attributes of salaried employees
-    employee(SalariedEmployee):
+    employee(SalariedEmployee)
       weekly_salary : Money;
 
     // Attributes of hourly employees
-    employee(HourlyEmployee):
+    employee(HourlyEmployee)
       hourly_wage  : Money,
       hours_worked : Float;
 
     // Attributes of all employees that earn commissions,
     // including those with base salary + commissions
-    employee(AnyCommissionEmployee):
+    employee(AnyCommissionEmployee)
       gross_sales     : Money,
       commission_rate : Float;
 
     // Attributes of employees with base salary + commissions
-    employee(BasePlusEmployee):
+    employee(BasePlusEmployee)
       base_salary : Money;
   }
 
@@ -439,6 +438,6 @@ Where to go from here
 
 It's interesting at this point to implement the data structures and logic of the online forum example in both Cell and Java, in order to see how the two paradigms (functional/relational programming and OOP) compare. You can read about it {#{comparison-link}#}.
 
-The {#{relational-link}#} and {#{updates-link}#} chapters contain the complete documentation for relational automata, but you'll have to read about {#{data-link}#} and {#{types-link}#} first. The {#{overview-link}#} will give you some additional high-level information.
+The {#{relational-link}#} section contains the complete documentation for relational automata, but you'll have to read about {#{data-link}#} and {#{types-link}#} first. The {#{overview-link}#} will give you some additional high-level information.
 
 This chapter focused on the most important of the two types of automata, namely relational automata. For an overview of the other type, reactive automata, just head to the corresponding {#{reactive-automata-link}#}. It should be readable even without any previous knowledge of the language.

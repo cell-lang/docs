@@ -9,7 +9,7 @@ The next step is to define the data types for the attributes of both entities an
 There's of course some tension between the two recommendations above: using relations instead of records to store information, and using user-defined types for the arguments of those relations. As an example, which of two schemas shown below should be preferred?
 
   schema StrategyGame {
-    enemy_unit(EnemyUnitId):
+    enemy_unit(EnemyUnitId)
       position_x : Int,
       position_y : Int,
       ...
@@ -19,7 +19,7 @@ There's of course some tension between the two recommendations above: using rela
   type Point = point(x: Int, y: Int);
 
   schema StrategyGame {
-    enemy_unit(EnemyUnitId):
+    enemy_unit(EnemyUnitId)
       position : Point,
       ...
   }
@@ -37,7 +37,7 @@ In a case like this, I would be inclined to use a single attribute of type {{Poi
     next_employee_id : Nat = 0;
 
     // Shared attributes of all employees
-    employee(Employee):
+    employee(Employee)
       name  : Name,
       ssn   : String;
 

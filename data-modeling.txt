@@ -11,16 +11,16 @@ It's now time to see how typical database data is modeled in Cell, and how it di
     next_part_id     : Nat = 0;
     next_supplier_id : Nat = 0;
 
-    part(PartId):
+    part(PartId)
       code        : String [unique],
       description : String;
 
-    supplier(SupplierId):
+    supplier(SupplierId)
       name    : String,
       address : String,
       phone*  : String;
 
-    sells(SupplierId, PartId):
+    sells(SupplierId, PartId)
       unit_price   : Money,
       availability : Nat;
 
@@ -156,7 +156,7 @@ Syntactic sugar
 
 Finally let's talk about syntactic sugar. Here's how you can declare all types of attributes for any given entity:
 
-  entity(EntityId):
+  entity(EntityId)
     mandatory_attribute               : Type1,
     optional_attribute?               : Type2,
     mandatory_multivalued_attribute+  : Type3,
@@ -181,7 +181,7 @@ A mandatory attibute is one that must have one and only one value for each insta
 
 If you want to make an attribute unique, so that no two entities can have the same value for it, just add the {{[unique]}} tag, which is compatible with all four types of attributes:
 
-  entity(EntityId):
+  entity(EntityId)
     unique_mandatory_attribute              : Type1 [unique],
     unique_optional_attribute?              : Type2 [unique],
     unique_mandatory_multivalued_attribute+ : Type3 [unique],
@@ -189,7 +189,7 @@ If you want to make an attribute unique, so that no two entities can have the sa
 
 That has the effect of adding a key on the second column of the relation that encodes the attribute. The very same syntactic sugar can be used for binary relationships:
 
-  relationship(Entity1Id, Entity2Id):
+  relationship(Entity1Id, Entity2Id)
     mandatory_attribute               : Type1,
     optional_attribute?               : Type2,
     mandatory_multivalued_attribute+  : Type3,

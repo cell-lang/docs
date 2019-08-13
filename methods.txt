@@ -35,7 +35,7 @@ can be rewritten more concisely like so:
 which makes them look like function/method calls, therefore providing a uniform syntax to access both stored attributes and computed ones. Here's an example:
 
   schema People {
-    person(PersonId):
+    person(PersonId)
       first_name : String,
       last_name  : String;
   }
@@ -56,7 +56,7 @@ Nondeterminism
 Function in Cell are, like in all pure functional languages, referentially transparent, which is just another way to say that they're deterministic: calling a function with the same inputs must always produce the same result. Unfortunately, that's not entirely true for methods. While methods cannot have any side effects, they're not entirely deterministic because they manipulate data structures whose elements are intrinsically unordered. Whenever you iterate through the elements of a mutable relation variable, the language does not guarantee a deterministic iteration order so if you're not careful you may end up writing nondeterministic code. Here's a couple of examples:
 
   schema Measurements {
-    measurement(MsrtId):
+    measurement(MsrtId)
       value : Float;
   }
 
@@ -64,18 +64,17 @@ Function in Cell are, like in all pure functional languages, referentially trans
     Float avg_value {
       count = 0;
       sum = 0.0;
-      for id, v <- measurements:
+      for id, v <- measurements {
         count = count + 1;
         sum = sum + v;
-      ;
+      }
       return sum / count;
     }
 
     Float* ord_values {
       values = ();
-      for id, v <- values:
+      for id, v <- values
         values = (values | v);
-      ;
       return values;
     }
   }

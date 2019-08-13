@@ -181,7 +181,7 @@ Finally we have tagged value types. Here are a few example:
   type Distance   = meters(Float);
   type TimeSpan   = seconds(Float);
   type String     = string(Nat*);
-  type Date       = date((<1..31>, <1..12>, Int));
+  type Fraction   = fraction((Int, NzNat));
 
   type Point      = cartesian_point((x: Float, y: Float)),
                     polar_point((ro: Float, theta: Float));
@@ -194,7 +194,7 @@ Finally we have tagged value types. Here are a few example:
 
 The same syntactic sugar provided for tagged records and tuples is available here as well. The following type definitions are completely equivalent to the ones above:
 
-  type Date       = date(<1..31>, <1..12>, Int);
+  type Fraction   = fraction(Int, NzNat);
 
   type Point      = cartesian_point(x: Float, y: Float),
                     polar_point(ro: Float, theta: Float);
@@ -378,7 +378,7 @@ and the {{Result}} type is a slightly more capable version of it, that can retur
   type Success[V]   = success(V);
   type Failure[E]   = failure(E);
 
-An alternative to {{Maybe}} is the {{Opt}} type. It represents the absence of value with an empty sequence, and its presence with a 1-element tuple. It may be preferrable (in some cases, at least) because standard sequence manipulation constructs and functions can be applied to it as well. Here's the definition:
+An alternative to {{Maybe}} is the {{Opt}} type. It represents the absence of value with an empty sequence, and its presence with a 1-element tuple. It may be preferable (in some cases, at least) because standard sequence manipulation constructs and functions can be applied to it as well. Here's the definition:
 
   type Opt[T] = (), (T);
 
@@ -390,6 +390,7 @@ and the type of all 7-bit ascii strings, which is obviously a subset of {{String
 
   type Ascii = string(<0..127>*);
 
-We can also define the type of all one-character strings, and in doing so we can use those strings to represent individual characters in a type safe way:
+There are also types for dates and time:
 
-  type Char = string((Nat));
+  type Time = time(Int);
+  type Date = date(Int);

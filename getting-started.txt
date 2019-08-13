@@ -1,10 +1,10 @@
 Getting started
 
-The latest version (0.3) of the Java code generator can be downloaded {#{download-java-link}#}.
+The latest version (0.4.4) of the Java code generator can be downloaded {#{download-java-link}#}.
 
-This release is Java-only, but version 0.1 of the {#{download-cpp-linux-link}#} and {#{download-csharp-link}#} code generators is still available. They can be used to experiment with the functional subset of the language and reactive automata, which have changed very little from 0.1 to 0.3 (save for performance optimization) but if you're interested in relational automata those versions are now completely obsolete. New versions of the C++ and C# code generators will be released again with version 0.5.
+Version 0.1 of the {#{download-cpp-linux-link}#} and {#{download-csharp-link}#} code generators are still available, but at this point they are completely obsolete. They will be updated again with the next version of the language, 0.5.
 
-After you unzip the file, you'll see four directories: {{bin}}, {{stdlib}}, {{examples}} and {{sublime-text}}. The first one contains the compiler, the second one the standard library (which at the moment consists of just one file, {{prelude.cell}}), and the third one a few ready-to-build examples to get you started. To create your own project, just pick one of them and start making changes to it. You can find more information about them in {{examples/README.txt}}.
+After you unzip the file, you'll see four directories: {{bin}}, {{stdlib}}, {{examples}} and {{sublime-text}}. The first one contains the compiler, the second one the standard library (which at the moment consists of just one file, {{prelude.cell}}), and the third one a few ready-to-build examples to get you started. To create your own project, just pick one of them and start making changes to it. You can find more information about them in {{examples/README.txt}}. If you want a more complex example to play with, the IMDB example described {#{benchmarks-relational-link-2}#} is available on {#{imdb-github-link}#}.
 
 Each of the code generators produces, when the compilation process is successful, one or more source files in the target language. These files can then be fed directly to a compiler for the corresponding language if your Cell source code includes a {{Main(..)}} procedure, or otherwise included in an existing project.
 
