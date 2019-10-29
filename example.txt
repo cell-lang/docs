@@ -15,7 +15,7 @@ The first thing we'll need to do is to design our application's persistent data 
 
 Note that the {{USERNAME}} field in {{USERS}} has to be unique and that all fields in all tables are mandatory, with the only exception of {{DATE_OF_BIRTH}} in {{USERS}}.
 
-In order to create something equivalent in Cell, we'll need to define a relational automaton. At first glance, a relational automaton looks a bit like a class in object-oriented languages: it combines a (mutable) data structure with the code that manipulates it. The similarities end there, though. One of the major differences is that you can make use of relations when defining the (type of the) state of a relational automaton. (The term “relation” is just another name for what in SQL is called a table. For a more formal definition, check the Wikipedia entries for {#{binary-relation-link}#} and {#{relation-link}#} relations). This is the definition of an automaton that is more or less equivalent, in terms of information content, to the above SQL schema:
+In order to create something equivalent in Cell, we'll need to define a relational automaton. At first glance, a relational automaton looks a bit like a class in object-oriented languages: it combines a (mutable) data structure with the code that manipulates it. The similarities end there, though. One of the major differences is that you can make use of relations when defining the (type of the) state of a relational automaton. (The term “relation” is just another name for what in SQL is called a table. For a more formal definition, check the Wikipedia entries for {<{<a href='https://en.wikipedia.org/wiki/Binary_relation'>binary</a>}>} and {<{<a href='https://en.wikipedia.org/wiki/Finitary_relation'>n-ary</a>}>} relations). This is the definition of an automaton that is more or less equivalent, in terms of information content, to the above SQL schema:
 
   type UserId  = user_id(Int);
   type GroupId = group_id(Int);
@@ -69,7 +69,7 @@ User-defined types and entity identifiers
 
 The first thing to notice in the Cell code is the presence of the {{UserId}} and {{GroupId}} type definitions. In a relational database every entity in the application's domain is usually identified by an integer or sometimes a string while in OOP every entity type is usually mapped to a class that contains all the entity's attributes. In Cell, on the other hand, the recommended approach is to define a custom type like {{UserId}} whose sole purpose is to identify an entity of a specific type, but to store all its attributes using relations. Doing so provides a modicum of type safety, makes the code more readable, and most importantly allows us to define functions and methods that are polymorphic on the entity type, just like in OOP, while at the same taking advantage of the benefits provided by relations (more on that later). That's made possible by the fact that in Cell, unlike in SQL, the attributes/columns of a relation can be of any user-defined type.
 
-The {{UserId}} and {{GroupId}} type definitions may look a bit strange to you if you're not familiar with functional programming: everything is explained in detail in the chapters on {#{data-link}#} and {#{types-link}#}, but for now just think of them as records/structs/classes with a single anonymous and public field of type {{Int}}.
+The {{UserId}} and {{GroupId}} type definitions may look a bit strange to you if you're not familiar with functional programming: everything is explained in detail in the chapters on {<{<a href='data.html'>data</a>}>} and {<{<a href='types.html'>types</a>}>}, but for now just think of them as records/structs/classes with a single anonymous and public field of type {{Int}}.
 
 
 Entities, attributes and methods
@@ -120,7 +120,7 @@ Being able to declaratively enforce the fact that an attribute cannot have the s
     [UserId] users_who_signed_up_on(Date d) = [u : u <- signup_date(?, d)];
   }
 
-The {{signup_date(?, d)}} expression iterates (loosely speaking) through all the entries in {{signup_date}} whose second argument is equal to {{d}}. The first result is produced in constant time, {{O(1)}}, (it's basically a hashtable lookup) and retrieving each subsequent result is, in terms of efficiency, pretty much like iterating through the elements of a list. Searches can be performed, with the same efficiency, on any attribute of the relation, or any combination of them in the case of ternary relations, which we'll examine later.
+The {{signup_date(?, d)}} expression iterates (loosely speaking) through all the entries in {{signup_date}} whose second argument is equal to {{d}}. The first result is produced in constant time, {<{<strong>O(1)</strong>}>}, (it's basically a hashtable lookup) and retrieving each subsequent result is, in terms of efficiency, pretty much like iterating through the elements of a list. Searches can be performed, with the same efficiency, on any attribute of the relation, or any combination of them in the case of ternary relations, which we'll examine later.
 
 
 Syntactic sugar
@@ -188,7 +188,7 @@ The comment that precedes the declaration of each relation is the informal relat
 
 Each entry in the binary relation {{member}} encodes what in an E/R model would be called a relationship between two entities, namely the fact that a specific user has joined a specific chat group. It's a many-to-many relationship, with every user being able to join any number of groups, and groups having any number of members. Just like attribute relations like {{name}} or {{date_of_birth}} it can be searched efficiently on any attribute: if, for example, {{u}} the id of a user and {{g}} that of a chat group (of type {{UserId}} and {{GroupId}} respectively), then the expression {{member(u, ?)}} will (loosely speaking) iterate through the ids of all chat groups {{u}} has joined, and {{member(?, g)}} will provide the list of members of group {{g}}.
 
-The two ternary relations {{joined_on}} and {{karma}} store what we can regard as attributes of the membership relationship, as opposed to attributes of entities like users or groups. The first two arguments form a key for both relations, meaning that for each combination of user and group there can be only one join date and one karma, but a user can still, for instance, have a karma in one group and a different one in another. The fact that attributes like these cannot be "attached" to any single entity makes them awkward to model in conventional languages, which use records as their primary composite data structure, but can be represented very elegantly using relations. Accessing the value of one such attribute is very similar to accessing the attributes of an entity, like {{username}} or {{admin}}: the expression {{karma(u, g)}} returns the karma of user {{u}} in group {{g}} (and of course will fail if {{u}} never joined {{g}}). Similarly, ternary relations can be searched on any argument or combination thereof: {{joined_on(?, g, d)}}, for instance, will produce a list of all users who joined group {{g}} on day {{d}}. Lookups are performed in constant time ({{O(1)}}), and the same goes for retrieving the first result in any search.
+The two ternary relations {{joined_on}} and {{karma}} store what we can regard as attributes of the membership relationship, as opposed to attributes of entities like users or groups. The first two arguments form a key for both relations, meaning that for each combination of user and group there can be only one join date and one karma, but a user can still, for instance, have a karma in one group and a different one in another. The fact that attributes like these cannot be "attached" to any single entity makes them awkward to model in conventional languages, which use records as their primary composite data structure, but can be represented very elegantly using relations. Accessing the value of one such attribute is very similar to accessing the attributes of an entity, like {{username}} or {{admin}}: the expression {{karma(u, g)}} returns the karma of user {{u}} in group {{g}} (and of course will fail if {{u}} never joined {{g}}). Similarly, ternary relations can be searched on any argument or combination thereof: {{joined_on(?, g, d)}}, for instance, will produce a list of all users who joined group {{g}} on day {{d}}. Lookups are performed in constant time ({<{<strong>O(1)</strong>}>}), and the same goes for retrieving the first result in any search.
 
 
 Symmetric relations
@@ -301,7 +301,7 @@ is the same as:
     ...
   }
 
-save for the fact that type of the message is not explicitly named (how exactly this works will become clear after reading the chapter on {#{types-link}#}).
+save for the fact that type of the message is not explicitly named (how exactly this works will become clear after reading the chapter on {<{<a href='types.html'>types</a>}>}).
 
 
 Differences between relational automata and classes
@@ -335,17 +335,17 @@ While it is possible to build a complete application with it, Cell is designed t
 
 Let's start with the pair of complementary methods {{load(..)}} and {{save(..)}}. The latter save a snapshot of the state of the automaton to a {{java.io.Writer}} object. The state of the automaton is saved in Cell's standard textual format, so that is can be manually inspected and modified. The {{load(..)}} method, on the other hand, erases the current state of the automaton and loads a new state from the provided {{java.io.Reader}}, as long as that's a valid state for the automaton in question. The new state must be in the same text format used by the {{save(..)}} method. If the load operation fails, for whatever reason, the state of the automaton is left unchanged. Loading a previously saved state results in an identical copy of the original automaton, that will pick up where the original left off, and behave in the exact same way.
 
-The next method, {{execute(..)}}, is used to send a message to the automaton. Here too the message is provided as a string containing its standard textual representation. If an error occurs during the execution of the message handler an exception is thrown, and the state of the automaton is left unchanged, as we've already mentioned before.
+The next method, {{execute(..)}}, can be used to send a message to the automaton. The message is provided as a string containing its standard textual representation. If an error occurs during the execution of the message handler an exception is thrown, and the state of the automaton is left unchanged, as already mentioned. This is not the only way to send the automaton a message, as there's a much faster alternative that we'll see in a minute, but having a generic way to send any message in textual form comes in handy in many situations.
 
 Here's an example of how to use the three methods just discussed. The following Java code creates an instance of {{OnlineForum}}, loads an initial state for it from a file, sends a message to the automaton to delete one specific user from the dataset and saves the resulting state/dataset to another file:
 
 {#{code/using-online-forum.html}#}
 
-Here's an example of what a valid {#{online-forum-state-link}#} for the {{OnlineForum}} automaton looks like, once it's converted into its standard textual representation.
+Here's an example of what a valid {<{<a href='online-forum-state.txt'>state</a>}>} for the {{OnlineForum}} automaton looks like, once it's converted into its standard textual representation.
 
-All the remaining methods are specific to each type of automaton, and they're all read-only. In this case, there's just {{string fullName(long)}} and {{long usersWhoSignedUpOn(Date)}} which, as you would expect, are used to invoke the corresponding methods of the {{OnlineForum}} automaton.
+All the remaining methods are specific to each type of automaton, and they're used to invoke its message handlers and methods. In this specific case, {{void addUser(..)}} and {{void deleteUser(long)}} can be used to send the corresponding messages, and in many cases they should be preferred to {{execute(..)}} since they're much faster, while {{string fullName(long)}} and {{long usersWhoSignedUpOn(Date)}} invoke the corresponding (read-only) methods.
 
-The only thing left to mention is the fact that, in order for the generated code to interface smoothly with hand-written Java code, the Cell compiler tries to map each Cell type that appears in the interface of an automaton to a standard Java type or to generate a corresponding Java class for it: in the rare cases in which that fails, the corresponding piece of data is either returned as a {{net.cell_lang.Value}} object, when data moves from Cell to Java, or passed in as a string containing the textual representation of a Cell value when going in the other direction. The details of the mapping are described in another chapter.
+The only thing left to mention is the fact that, in order for the generated code to interface smoothly with hand-written Java code, the Cell compiler tries to map each Cell type that appears in the interface of an automaton to a standard Java type or to generate a corresponding Java class for it: in the rare cases in which that fails, the corresponding piece of data is returned or has to be passed in as a string containing the textual representation of the Cell value. The details of the mapping are described in another chapter.
 
 
 Auto-generated methods and message handlers
@@ -436,8 +436,8 @@ This example is discussed in more depth in another chapter.
 
 Where to go from here
 
-It's interesting at this point to implement the data structures and logic of the online forum example in both Cell and Java, in order to see how the two paradigms (functional/relational programming and OOP) compare. You can read about it {#{comparison-link}#}.
+It's interesting at this point to implement the data structures and logic of the online forum example in both Cell and Java, in order to see how the two paradigms (functional/relational programming and OOP) compare. You can read about it {<{<a href='comparison.html'>here</a>}>}.
 
-The {#{relational-link}#} section contains the complete documentation for relational automata, but you'll have to read about {#{data-link}#} and {#{types-link}#} first. The {#{overview-link}#} will give you some additional high-level information.
+The {<{<a href='relational.html'>relational automata</a>}>} section contains the complete documentation for relational automata, but you'll have to read about {<{<a href='data.html'>data</a>}>} and {<{<a href='types.html'>types</a>}>} first. The {<{<a href='overview.html'>overview</a>}>} will give you some additional high-level information.
 
-This chapter focused on the most important of the two types of automata, namely relational automata. For an overview of the other type, reactive automata, just head to the corresponding {#{reactive-automata-link}#}. It should be readable even without any previous knowledge of the language.
+This chapter focused on the most important of the two types of automata, namely relational automata. For an overview of the other type, reactive automata, just head to the corresponding {<{<a href='reactive.html'>chapter</a>}>}. It should be readable even without any previous knowledge of the language.

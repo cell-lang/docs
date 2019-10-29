@@ -378,10 +378,6 @@ and the {{Result}} type is a slightly more capable version of it, that can retur
   type Success[V]   = success(V);
   type Failure[E]   = failure(E);
 
-An alternative to {{Maybe}} is the {{Opt}} type. It represents the absence of value with an empty sequence, and its presence with a 1-element tuple. It may be preferable (in some cases, at least) because standard sequence manipulation constructs and functions can be applied to it as well. Here's the definition:
-
-  type Opt[T] = (), (T);
-
 Finally we have the standard string type:
 
   type String = string(Nat*);

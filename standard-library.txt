@@ -1,0 +1,411 @@
+Standard library
+
+The standard library right now consists of a single file, {<{<a href='https://github.com/cell-lang/compiler/blob/master/src/stdlib/prelude.cell'>prelude.cell</a>}>}, which is required even for the most trivial programs.
+
+The prelude defines a number of basic data types shown here:
+
+  type Symbol         = <+>;
+  type Int            = <*..*>;
+  type Float          = <!>;
+
+  type Any            = Symbol, Int, Float, Any*, [Any],
+                        [Any, Any], [Any, Any, Any], <+>(Any);
+
+  type Bool           = true, false;
+  type True           = true;
+  type False          = false;
+
+  type Nat            = <0..*>;
+  type NzNat          = <1..*>;
+
+  type Bit            = <0..1>;
+  type Byte           = <0..255>;
+
+  type String         = string(Nat*);
+  type Ascii          = string(<0..127>*);
+
+  type Nothing        = nothing;
+  type Just[T]        = just(T);
+  type Maybe[T]       = nothing, just(T);
+
+  type Success[T]     = success(T);
+  type Failure[T]     = failure(T);
+  type Result[R, E]   = success(R), failure(E);
+
+  type Date           = date(Int);
+  type Time           = time(Int);
+
+They've all been described in the chapter on {<{<a href='types.html'>types</a>}>}. It also defines one protocol, {{Ord}}, described {<{<a href='miscellanea.html'>here</a>}>}:
+
+  protocol Ord:
+    (_<_) : Ord, Ord -> Bool;
+
+
+Operators
+
+The operators {{+}}, {{-}}, {{*}}, {{/}}, {{<}}, {{>}}, {{<=}} and {{>=}} are defined for any combination of integers and floating point numbers, and behave just like in any other language. {{-}} can also be used for set difference and {{*}} to repeat a string any number of times:
+
+  [0, 1, 2, 3] - [0, 2, 4]    // [1, 3]
+  3 * "ab"                    // "ababab"
+
+The operator {{^}} is used for exponentiation: it can work any combination of integers and floating point numbers, but it always returns a floating point number:
+
+  3   ^ 2       // 9.0
+  3.0 ^ 2       // 9.0
+  3   ^ 2.0     // 9.0
+  3.0 ^ 2.0     // 9.0
+
+{{&}} is used for concatenating sequences and strings, for set union and for merging maps:
+
+  (0, 1, 2) & (3, 4, 5)       // (0, 1, 2, 3, 4, 5)
+  "abc" & "def"               // "abcdef"
+  [0, 1, 2] & [1, 2, 3]       // [0, 1, 2, 3]
+  [0 -> "A"] & [1 -> "B"]     // [0 -> "A", 1 -> "B"]
+
+In order to be merged successfully, two maps cannot have keys in common, or the operation will fail. To access the individual characters of a string, use {{[]}}:
+
+  "abcdef"[0]     // `a`
+  "abcdef"[3]     // `d`
+
+
+Builtin functions
+
+Builtin function technically don't belong to {{prelude.cell}}, but they're discussed here because they're as fundamental as prelude functions. Their names begin and end with an underscore. Some of them are used to manipulate numbers:
+
+  // Integer modulo. Same as {{x % y}} in {{C}}
+  Int _mod_(Int x, Int y)
+
+  // Bitwise {{and}}. Same as {{x & y}} in {{C}}
+  Int _and_(Int x, Int y)
+
+  // Bitwise {{or}}. Same as {{x | y}} in {{C}}
+  Int _or_(Int x, Int y)
+
+  // Same as {{x ^ y}} in {{C}}
+  Int _xor_(Int x, Int y)
+
+  // Converts an integer to a floating point number
+  // _float_(5) == 5.0
+  Float _float_(Int)
+
+  // Given a 64-bit floating point number, returns the same
+  // bit pattern reinterpreted as a 64-bit integer. Same as
+  // {{* (long long *) & x}} in {{C}} if {{x}} is of type double
+  Int _bits_(Float x)
+
+  // Mantissa of a floating point number
+  Int _mantissa_(Float)
+
+  // Decimal exponent of a floating point number
+  Int _dec_exp_(Float)
+
+A second group are used to efficiently manipulate sets and maps. Their time complexity is {<{<strong>O(log(N))</strong>}>}, where {<{<strong>N</strong>}>} is the size of the input set or map:
+
+  // Inserts an element into a set
+  [T] _insert_([T] set, T elt);
+
+  // Removes an element from a set
+  [T] _remove_([T] set, T elt);
+
+  // Inserts a key-value pair into a map
+  [K -> V] _put_([K -> V] map, K key, V value);
+
+  // Removes a key and its associated value from a map
+  [K -> V] _drop_([K -> V] map, K key);
+
+Finally, we have builting functions for generating the textual representation of a value and for parsing the textual representation into its corresponding value:
+
+  // Returns a string containing the representation of any value
+  // _print_([1, 2, 3]) == "[1, 2, 3]"
+  Ascii _print_(Any)
+
+  // Given the textual representation of a value returns
+  // either the parsed value or the position (row, column)
+  // of the error if parsing fails
+  // _parse_("point(x: 2, y: 5)") == success(point(x: 2, y: 5))
+  // _parse_("point(x: 2, y: )") == failure((1, 15))
+  Result[Any, (Nat, Nat)] _parse_(String)
+
+
+Numeric functions
+
+  // Absolute value
+  Nat abs(Int)
+
+  // Sum of a sequence of integers
+  Int sum(Int*)
+
+  // bit(false) {{->}} 0
+  // bit(true)  {{->}} 1
+  Bit bit(Bool)
+
+  // Square root
+  Float sqrt(Float)
+  Float sqrt(Int)
+
+
+Sequences
+
+  // Takes the first {{n}} elements of sequence {{s}}, or the
+  // entire sequence if the length of {{s}} is less than {{n}}
+  // Time complexity: {{O(1)}}
+  // take((10, 20, 30, 40), 3) {{->}} (10, 20, 30)
+  // take((10, 20), 3)         {{->}} (10, 20)
+  T* take(T* s, Int n)
+
+  // Returns {{s}} minus its first {{n}} elements, or the empty
+  // sequence if the length of {{s}} is less than {{n}}
+  // Time complexity: {{O(1)}}
+  // drop((10, 20, 30, 40, 50), 3) {{->}} (40, 50)
+  // drop((10, 20), 3)             {{->}} ()
+  T* drop(T* s, Int n)
+
+  // Subsequence of {{s}} from index {{i}} to {{i+n-1}} inclusive
+  // Fails if the length of {{s}} is less than {{i+n}}
+  // Time complexity: {{O(1)}}
+  T* slice(T* s, Int i, Int n)
+
+  // Reverses a sequence
+  T* reverse(T* s)
+
+  // Concatenates a sequence of sequences
+  // join(((1, 2), (3, 4, 5), (6))) {{->}} (1, 2, 3, 4, 5, 6)
+  T* join(T** seqs)
+
+
+Sets
+
+  // Checks whether two sets are disjoint
+  // Time complexity: {{O(|s1| * log(|s2|))}}
+  Bool disjoint([Any] s1, [Any] s2)
+
+  // Checks whether {{s1}} is a subset of {{s2}}
+  // Time complexity: {{O(|s1| * log(|s2|))}}
+  Bool subset([Any] s1, [Any] s2)
+
+  // Union of a set of sets
+  // union([[1, 2], [2, 3, 4], [8, 10]]) {{->}} [1, 2, 3, 4, 8, 10]
+  [T] union([[T]] sets)
+
+  // Intersection of two sets
+  // Time complexity: {{O(|s1| * log(|s2|))}}
+  [T] intersection([T] s1, [T] s2)
+
+  // Returns an arbitrary element of a set. Fails is the set is empty
+  // This function is deterministic: for any given set it
+  // will always return the same elements, but which
+  // specific element is returned is implementation-defined
+  T any([T])
+
+
+Maps
+
+  // Merges a sequence of maps. Fails if two maps have a common
+  // key unless all common keys are associated to the same value
+  [A -> B] merge([A -> B]*)
+
+  // Merges a set of maps. Fails if two maps have a common key
+  // unless all common keys are associated to the same value
+  [A -> B] merge([[A -> B]] maps)
+
+
+Maximum and minimum
+
+  // Maximum and minimum
+  Ord min(Ord a, Ord b)
+  Ord max(Ord a, Ord b)
+
+  // Returns all elements {{x}} of {{s}} that minimize {{f(x)}}
+  T* min_by(T* s, (T -> Ord) f)
+  [T] min_by([T] s, (T -> Ord) f)
+
+  // Returns all elements {{x}} of {{s}} that maximize {{f(x)}}
+  T* max_by(T* s, (T -> Ord) f)
+  [T] max_by([T] s, (T -> Ord) f)
+
+  // Maximum and minimum element of nonempty sequences and sets
+  Ord min(Ord+ ns)
+  Ord max(Ord+ ns)
+  Ord min([+Ord] ns)
+  Ord max([+Ord] ns)
+
+
+Strings
+
+  // Creates a string from a sequence of characters
+  // {{string(chs)}} is equivalent to {{:string(chs)}}
+  String string(Nat*)
+
+  // Length of a function
+  Nat length(String)
+
+  // Reverses a string
+  String reverse(String)
+
+  // Same as {{T* slice(T*, Int, Int)}}, but for strings instead of sequences
+  String substr(String s, Int i, Int n)
+
+  // Same as {{T* take(T*, Int)}}, but for strings instead of sequences
+  String take(String, Int)
+
+  // Same as {{T* drop(T*, Int)}}, but for strings instead of sequences
+  String drop(String, Int)
+
+  // Concatenates a sequence of strings
+  // append(("ab", "c", "def")) {{->}} "abcdef"
+  String append(String*)
+
+  // Concatenates a sequence of strings but also
+  // inserts another string between them
+  // append(("ab", "c", "def"), ", ") {{->}} "ab, c, def"
+  String append(String*, String)
+
+
+Maybe and Result types
+
+The prelude contains also a bunch of functions to work with the {{Maybe[T]}} and {{Result[V, E]}} types. They're shown here with their implementation:
+
+  // Just a way to write the symbol {{nothing}} without the leading colon
+  Nothing nothing = :nothing;
+
+  // Ditto.
+  Just[T] just(T x) = :just(x);
+
+  // Helper constructor
+  Maybe[T] maybe(T x, Bool cond) = if cond then :just(x) else :nothing;
+
+  // Given a value of the form {{just(x)}}, returns {{x}}
+  // Note that this is a total function: it only accepts values of the
+  // form {{just(..)}}. See the example below for an explanation
+  T value(Just[T]) =
+    just(x?)  = x;
+
+  // Same as {{value(..)}}, but accepts also the value {{nothing}}
+  // Obviously {{value_unsafe(:nothing)}} throws an exception
+  T value_unsafe(Maybe[T]) =
+    just(x?)  = x,
+    _         = undefined;
+
+  // Applies {{f(..)}} to the value inside {{m}}, if there's one at all
+  Maybe[B] apply(Maybe[A] m, (A -> B) f) =
+    just(x?)  = just(f(x)),
+    nothing   = nothing;
+
+  // Given a sequence of {{Maybe[T]}}, drops the tag from the elements
+  // of the form {{just(x)}}, and discards the others
+  T* values(Maybe[T]* s) = (value(e) : e <- s, e != nothing);
+
+  // Checks whether a {{Result[V, E]}} value is of the form {{success(..)}}
+  // The way this function is defined allows the compiler to narrow
+  // down the type of the argument if this function is used in the
+  // condition of a {{if}} expression or statement
+  True  succeeded(Success[T]) = true;
+  False succeeded(Failure[T]) = false;
+
+  // Same as {{not succeeded(..)}}
+  False failed(Success[T]) = false;
+  True  failed(Failure[T]) = true;
+
+  // Given a value of the form {{success(..)}}, return its content
+  // Note that this is a total function: it doesn't accept values of
+  // the form {{failure(..)}}. See example below for an explanation
+  T result(Success[T])
+    success(r?) = r;
+
+  // Given a value of the form {{failure(..)}}, returns the error value
+  // This too is a total function: it doesn't accept values of the form
+  // {{success(..)}}. See example below for an explanation
+  T error(Failure[T])
+    failure(e?) = e;
+
+The usage of some of these functions is non-obvious, and it's best explained with an example. The following procedure reads the content of a text file, and tries to parse it. If the operation is successful, it just returns the parsed value. If it fails, either because the file cannot be read or because its content is not a valid (textual representation of a) Cell value, it returns a default value:
+
+  Any ReadValueFromFile(String filename, Any default) {
+    // The return type of {{FileRead(..)}} is {{Maybe[Byte*]}}
+    res = FileRead(filename);
+
+    // If the file could not be read, we just return the default value
+    // The {{res == nothing}} comparison in the condition of an {{if}}
+    // statement allows the compiler to narrow down the type of {{res}}
+    return default if res == nothing;
+
+    // Now the typechecker knows that {{res}} can only be of the
+    // form {{just(..)}}, so it can be passed as argument to {{value(..)}}
+    content = value(res);
+
+    // Assuming for simplicity that the content is an ASCII string
+    str = string(content);
+
+    // Trying to parse the content string.
+    // The return type of {{_parse_(..)}} is {{Result[Any, (Nat, Nat)]}}
+    res = _parse_(str);
+
+    if succeeded(res) {
+      // Since {{succeeded(res)}} returns {{true}} if and only if
+      // {{res}} is of the form {{success(..)}}, the typechecker
+      // is able to infer that inside this code block the type of {{res}}
+      // is {{Success[Any]}}, so it accepts the call {{result(res)}}
+      // which would have otherwise been rejected
+      return result(res);
+    }
+    else {
+      // Here the typechecker has narrowed down the type of {{res}} to
+      // {{Failure[(Nat, Nat)]}}, so it now accepts the call {{error(res)}}
+      row, col = error(res);
+      Print("Parsing error: row " & _print_(row) & ", column " & _print_(col) & "\n");
+      return default;
+    }
+  }
+
+The implementation of {{ReadValueFromFile(..)}} relies on the unusual typechecking capabilities of the Cell compiler. Everything is explained in detail in the "Type refinement" section of the chapter on {<{<a href='typechecking.html'>typechecking</a>}>}.
+
+
+Miscellanea
+
+The {{untag(..)}} function drops the tag from a tagged value:
+
+  // untag(:any_tag(25)) {{->}} 25
+  T untag(<+>(T)) =
+    t?(v?) = v;
+
+
+Builtin procedures
+
+Just like builtin functions, builtin procedures are not technically part of {{prelude.cell}}, but they are listed here for convenience:
+
+  // Reads the content of a given file, and returns it
+  // wrapped in a Maybe type. Returns {{nothing}} if the
+  // file cannot be read, for whatever reason
+  Maybe[Byte*] FileRead(String filename)
+
+  // Write the given sequence of bytes to a file, overwriting the
+  // existing content. Returns {{true}} on success, {{false}} on failure
+  Bool FileWrite(String filename, Byte* data)
+
+  // Just like {{FileWrite(..)}}, but if the file already exists it
+  // appends to the existing content instead of overwriting it.
+  // Returns {{true}} on success, {{false}} on failure
+  Bool FileAppend(String filename, Byte* data)
+
+  // Prints the content of a given string to the standard output
+  Print(String output)
+
+  // Reads the next character from the standard input, and returns
+  // it wrapped in a Maybe type. Returns {{nothing}} on EOF
+  Maybe[Nat] GetChar()
+
+  // Exits the application with the given error code
+  Exit(Nat)
+
+  // Returns the current UTC time
+  Time Now()
+
+  // The first call to {{Ticks()}} returns {{0}}. Every subsequent call
+  // returns the number of milliseconds elapsed since the first call
+  Nat Ticks()
+
+  // Takes as argument any relational automaton instance
+  // Returns an error message if the last message sent
+  // to the instance failed, or just the empty string if
+  // it succeeded.
+  String Error(..)

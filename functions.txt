@@ -6,11 +6,7 @@ Functions in Cell have no side effects and are referentially transparent, but ca
 
   Int factorial(Int n) = if n == 0 then 1 else n * factorial(n-1);
 
-The signature of the function comes first, followed by the {{=}} sign, then an expression that forms the body of the function and a semicolon that terminates the declaration. The type of the arguments and the return type are mandatory. To compare two values for equality just use the {{==}} operator, and to check if they're different use {{!=}}. The if/then/else is a conditional expression, and can have any number of branches (note the use of the {{elif}} keyword):
-
-  < -1..1> sign(Int x) = if   x > 0  then  1
-                         elif x < 0  then -1
-                                     else  0;
+The signature of the function comes first, followed by the {{=}} sign, then an expression that forms the body of the function and a semicolon that terminates the declaration. The type of the arguments and the return type are mandatory. To compare two values for equality just use the {{==}} operator, and to check if they're different use {{!=}}. The {{if}} .. {{then}} .. {{else}} .. is a conditional expression, similar to .. {{?}} .. {{:}} .. in C or Java.
 
 Functions with no arguments in a referentially transparent language are of course just constants. They are declared and referenced without using parentheses:
 
@@ -30,9 +26,9 @@ Boolean expressions can be built using the standard logical connectors {{and}}, 
 
 If an expression is not defined for some combination of values for its variables, you can use the {{undefined}} keyword:
 
-  Int factorial(Int n)  = if   n == 0 then 1
-                          elif n > 0  then n * factorial(n-1)
-                                      else undefined;
+  Int factorial(Int n)  = if n == 0 then 1                  else
+                          if n > 0  then n * factorial(n-1) else
+                                         undefined;
 
 {{undefined}} can be used in any context where an ordinary expression can go: but if it's ever evaluated, it throws an exception. Once an exception is thrown, there's no way to "catch" it inside functions, (only automata can recover from that) so if your program consists only of functional code the effect of evaluating {{undefined}} is to simply terminate the program.
 
@@ -46,9 +42,9 @@ Line comments begin with either {{//}} or {{##}}. The two are equivalent, but, b
 
 Currently there's no support for multiline comments.
 
-When symbols or tagged values are used inside expressions they have to be written with a leading {{:}} (save for {{true}} and {{false}} of course), so as to distinguish them from variables or constants in the case of symbols and function calls in the case of tagged values. That can be annoying especially when you're pasting inside your source code large chuncks of data that comes from somewhere else and which is usually written without the {{:}}, so in that case you can make use of a literal block {{ #{...} }}. Inside it you don't have to write the leading {{:}}, and you cannot access variables, constants, functions or use any other computational feature of the language. It's just data. As an example, the following two definitions of the constant {{a_large_value}} are equivalent:
+When symbols or tagged values are used inside expressions they have to be written with a leading {{:}} (save for {{true}} and {{false}} of course), so as to distinguish them from variables or constants in the case of symbols and function calls in the case of tagged values. That can be annoying especially when you're pasting inside your source code large chuncks of data that comes from somewhere else and which is usually written without the {{:}}, so in that case you can make use of a literal block {{ #{...} }}. Inside it you don't have to write the leading {{:}}, and you cannot access variables, constants, functions or use any other computational feature of the language. It's just data. As an example, the following two definitions of the constant {{a_complex_value}} are equivalent:
 
-  Any a_large_value = (
+  Any a_complex_value = (
       :alpha,
       :bravo,
       :meters(200),
@@ -60,7 +56,7 @@ When symbols or tagged values are used inside expressions they have to be writte
       ]
     );
 
-  Any a_large_value = #{(
+  Any a_complex_value = #{(
       alpha,
       bravo,
       meters(200),
@@ -117,44 +113,44 @@ Sequences support also access by index:
 
 With sets, the same syntax is used for membership tests:
 
-  // True if "elt" is an element of "a_set", false otherwise
+  // True if {{elt}} is an element of {{a_set}}, false otherwise
   a_set(elt)
 
 Binary relations also support partial membership tests:
 
-  // Checks whether "a_bin_rel" contains the entry "arg0, arg1"
+  // Checks whether {{a_bin_rel}} contains the entry {{arg0, arg1}}
   a_bin_rel(arg0, arg1)
 
   // True if there exists an entry whose first
   // element if arg0, false otherwise
-  a_bin_rel(arg0, *)
+  a_bin_rel(arg0, _)
 
-  // True if "a_bin_rel" contains an entry whose
-  // second element is "arg1", false otherwise
-  a_bin_rel(*, arg1)
+  // True if {{a_bin_rel}} contains an entry whose
+  // second element is {{arg1}}, false otherwise
+  a_bin_rel(_, arg1)
 
 and lookups:
 
-  // If "a_bin_rel" contains one and only one entry
+  // If {{a_bin_rel}} contains one and only one entry
   // whose left element is equal to arg0, returns the
   // corresponding right element. Fails otherwise.
-  a_bin_rel(arg0, !!)
+  a_bin_rel(arg0, !)
 
-  // If "a_bin_rel" contains one and only one entry
+  // If {{a_bin_rel}} contains one and only one entry
   // whose right element is equal to arg1, returns
   // the corresponding left element. Fails otherwise
-  a_bin_rel(!!, arg1)
+  a_bin_rel(!, arg1)
 
-There's also (starting with version 0.2 of the compiler) some syntactic sugar for the first of the above two operations:
+There's also some syntactic sugar for the first of the above two operations:
 
-  a_map_or_bin_rel(key) // Same as a_map_or_bin_rel(key, !!)
+  a_map_or_bin_rel(key) // Same as a_map_or_bin_rel(key, !)
 
 Records support all binary relation and map operations, plus access by field and field membership test:
 
-  // Returns the value of "a_field"
+  // Returns the value of {{a_field}}
   a_record.a_field
 
-  // Return true if "a_record" has field "a_field", false otherwise
+  // Return true if {{a_record}} has field {{a_field}}, false otherwise
   a_record.a_field?
 
 The dot notation can also be used with tagged records. The following code is valid, since values of type {{Point}} are actually tagged records:
@@ -173,24 +169,24 @@ It can also be used with union types, as long as all types are records or tagged
 
 Ternary relations support the same native operations as binary relations, but with three arguments instead of two in the case of membership tests and lookups:
 
-  // True if "a_tern_rel" includes the triple
-  // "arg0, arg1, arg2", false otherwise
+  // True if {{a_tern_rel}} includes the triple
+  // {{arg0, arg1, arg2}}, false otherwise
   a_tern_rel(arg0, arg1, arg2)
 
   // Partial membership test, any value for
   // the middle argument will do
-  a_tern_rel(arg0, *, arg2)
+  a_tern_rel(arg0, _, arg2)
 
   // Partial membership test, any pair of values
   // for left and right arguments will do
-  a_tern_rel(*, arg1, *)
+  a_tern_rel(_, arg1, _)
 
   // Look up the corresponding values in the first, second
   // or third columns respectively, if those values exist
   // and are unique. Fail otherwise
-  a_tern_rel(!!, arg1, arg2)
-  a_tern_rel(arg0, !!, arg2)
-  a_tern_rel(arg0, arg1, !!)
+  a_tern_rel(!, arg1, arg2)
+  a_tern_rel(arg0, !, arg2)
+  a_tern_rel(arg0, arg1, !)
 
 
 Sequence comprehension
@@ -215,6 +211,14 @@ If the sequence contains tuples, you can destructure them:
 
   // sum_triples(((1, 2, 3), (4, 5, 6), (7, 8, 9))) == (6, 15, 24)
   Int* sum_triples((Int, Int, Int)* ts) = (x + y + z : x, y, z <- ts);
+
+If one or more of the elements in the tuple are not used, you can replace the corresponding variable with an underscore:
+
+  // left(((1, 2), (3, 4), (5, 6))) == (1, 3, 5)
+  A* left((A, B)* seq) = (x : x, _ <- seq);
+
+  // middle(((1, 2, 3), (4, 5, 6), (7, 8, 9))) == (2, 5, 8)
+  B* middle((A, B, C)* seq) = (y : _, y, _ <- seq);
 
 And you can of course combine all the above features:
 
@@ -241,7 +245,7 @@ The index variable {{i}} goes from 0 to {{|seq|-1}}. You can include the last va
     if i == |seq| then elt else seq(i) : i <= |seq|
   );
 
-Note that the above example (and many of those that follow) is just that, an example, and not the recommended way to write that function. The following implementation is logically equivalent, but a lot more efficient (when used properly, it runs in amortized O(1)):
+Note that the above example (and many of those that follow) is just that, an example, and not the recommended way to write that function. The following implementation is logically equivalent, but a lot more efficient (when used properly, it runs in amortized {<{<strong>O(1)</strong>}>}):
 
   Int* insert_right(Int* seq, Int elt) = (seq | elt);
 
@@ -257,17 +261,23 @@ Comprehension can be applied to sets and relations as well. It's similar but a b
 The source expression {{x <- set1 | x <- set2}} iterates through all the elements of both {{set1}} and {{set2}}. The iteraction is done in an unspecified order (since sets and relations are unordered collections), and all duplicates in the result are of course eliminated. Any single-letter uppercase symbol like the {{T}} that appears in the signature of {{set_union()}} is a type variables that can represent any type. Type variables are used for generic programming, and they are needed to preserve type information: if the above function is used, for instance, to merge two sets of integers, the typechecker will be able to figure out that the result, too, will be a set of integers. We'll discuss them in detail in another chapter. Merging relations is very similar:
 
   [A, B] bin_rel_union([A, B] r1, [A, B] r2) = [
-    x, y : x, y <- r1 | x, y <- r2
+    x, y : x y <- r1 | x y <- r2
   ];
 
   [A, B, C] tern_rel_union([A, B, C] r1, [A, B, C] r2) = [
-    x, y, z : x, y, z <- r1 | x, y, z <- r2
+    x, y, z : x y z <- r1 | x y z <- r2
   ];
+
+Here too you can replace variables that are not needed with underscores:
+
+  [K] keys([K -> V] map) = [k : k _ <- map];
+
+  [V] values([K -> V] map) = [v : _ k <- map];
 
 Maps have a specific form of comprehension, that works in exactly the same way as binary relation comprehension, but will refuse to produce values that are not maps: if the resulting relation has duplicate keys, the computation will just fail. The only syntactic difference is that the comma between the two expression before the {{:}} is replaced with a {{->}}. Here's how you define the map version of union:
 
   [A -> B] map_union([A -> B] m1, [A -> B] m2) = [
-    x -> y : x, y <- m1 | x, y <- m2
+    x -> y : x y <- m1 | x y <- m2
   ];
 
 You can also define a function that can merge any number of sets:
@@ -285,12 +295,12 @@ The function iterates through all the elements in the first set and, for each of
 
 Set/relation comprehension expressions can iterate through sequences as well. The following function turns a sequence into a set:
 
-  [T] set(T* s) = [x : x <~ s];
+  [T] set(T* s) = [x : x <- s];
 
-When the source is a sequence, rather than a set or a relations, you need to use the {{<~}} arrow instead of {{<-}} and the same index variable and tuple destructuring functionalities that we saw for sequence comprehension are available. An example:
+When the source is a sequence, rather than a set or a relation, the same index variable and tuple destructuring functionalities that we saw for sequence comprehension are available, although the syntax is slightly different. An example:
 
   [Nat, A, B] pair_seq_to_indexed_tern_rel((A, B)* seq) = [
-    i, x, y : x, y @ i <~ seq
+    i, x, y : (x, y) @ i <- seq // Note the parentheses around {{x, y}}
   ];
 
 Just like with sequences we can have filter clauses, but here we can have more than one and they can be intermixed with generators. The following function produces the cartesian product of two sets of integers, but it filters out all negative integers from either set:
@@ -299,13 +309,13 @@ Just like with sequences we can have filter clauses, but here we can have more t
     x, y : x <- xs, x >= 0, y <- ys, y >=0
   ];
 
-You can also calculate a new value and assign it to a variable inside the loop. The following expression iterates through all the elements of {{xs}}, stores the value of {{f(x)}} in {{y}}, skips the iteraction when {{p(y)}} is false, and finally inserts the value of {{g(x, y)}} in the output set.
+You can also calculate a new value and assign it to a variable inside the loop. The following expression iterates through all the elements of {{xs}}, stores the value of {{f(x)}} in {{y}}, skips the iteration when {{p(y)}} is false, and if it's not it finally inserts the value of {{g(x, y)}} in the output set.
 
   [g(x, y) : x <- xs, y = f(x), p(y)]
 
 There's one more type of clause that you can use in set/relation comprehension expression, but we'll defer its discussion until we've examined pattern matching.
 
-You can also iterate through a projection of a relation, that is, a subset of it obtained by filtering it based on the value of some of the arguments. The following pairs of expressions are all equivalent, but the ones that are not commented out are a lot faster, because they don't need to do a linear scan of the entire relation:
+You can also iterate through a projection of a relation, that is, a subset of it obtained by filtering it based on the value of some of its arguments. The following pairs of expressions are all equivalent, but the ones that are not commented out are a lot faster, because they don't need to do a linear scan of the entire relation:
 
   // [y : x, y <- bin_rel, x == x0]
   [y : y <- bin_rel(x0, ?)]
@@ -355,14 +365,14 @@ The clause on the left can contains anything that can appear on the right of the
 
   // Evaluates to true if and only if the sequence {{xs}} contains
   // an element {{x}} at index {{i}} such that {{p(x, i)}} is true
-  (x @ i <~ xs : p(x, i))
+  (x @ i <- xs : p(x, i))
 
 Note that the iteration order is specified only when the iterating through a sequence (it's the obvious one, from the first element to the last), while it's implementation-defined when iterating through the elements of an unordered collection (that is, a set or a relation), and this may introduce some nondeterminism in the language if the predicate on the right can fail and throw an exception, so even though the evaluation of this expression terminates as soon as the boolean expression on the right evaluates to true, you can rely on this behaviour only when dealing with sequences.
 
 
 Operators
 
-This is the list of all cell operators, in order of decreasing precedence:
+This is the list of all Cell operators, in order of decreasing precedence:
 
 {#{cpp/ops-prec.html}#}
 
@@ -583,51 +593,22 @@ The combination of all the above patterns allow us to write universal functions,
 
   Int pow_2_32 = 4294967296;
 
-  Int mod_2_32(Int n) = mod(n, pow_2_32);
+  Int mod_2_32(Int n) = _mod_(n, pow_2_32);
 
   Int hashcode(Any value) =
     <+>     = hashcode(_print_(value)),
-    <*..*>  = xor(value / pow_2_32, mod_2_32(value)),
+    <*..*>  = _xor_(value / pow_2_32, mod_2_32(value)),
     <!>     = hashcode(_bits_(value)),
     ()      = mod_2_32(sum((hashcode(e) : e <- value))),
-    []      = mod_2_32(sum((hashcode(e) : e <- isort(value)))),
-    [,]     = mod_2_32(sum((hashcode(a) + hashcode(b) : a, b <- isort(value)))),
-    [,,]    = mod_2_32(sum((hashcode(a) + hashcode(b) + hashcode(c) : a, b, c <- isort(value)))),
+    []      |
+    [,]     |
+    [,,]    = mod_2_32(accumulate(value, hashcode($))),
     t?(v?)  = mod_2_32(hashcode(t) + hashcode(v));
 
 
 Builtin functions
 
-In the above example, {{isort(..)}} is a family of polymorphic functions defined in the standard library that take as argument either a set or a relation and return a sequence containing its entries sorted in an implementation-defined order. Functions whose names start and end with an underscore (like {{_print_(..)}} and {{_bits_(..)}} above) are builtin functions. Builtin functions provide functionalities that are either impossible to implement directly in Cell, or that cannot be implemented efficiently, or that are just convenient to have as builtins for whatever reason. Some of them have aliases in the standard library. The {{&}} operator for sequences, for example, is defined in terms of {{_cat_(..)}} builtin function (doing so will enable an O(1) implementation of sequence concatenation that uses ropes instead of arrays as the underlying physical data structure). Here's the most useful ones among those that don't have aliases:
-
-  // Returns a string containing the textual
-  // representation of any value
-  String _print_(Any)
-
-  // Given the textual representation of a value returns either the
-  // parsed value or the position of the error if parsing fails
-  Result[Any, Nat] _parse_(String)
-
-  // Converts an integer number into a floating point one
-  Float _float_(Int);
-
-  // Given a 64-bit floating point number, returns the
-  // same bit pattern reinterpreted as a 64-bit integer
-  Int _bits_(Float)
-
-There's also a number of builtin functions that are used to efficiently manipulate sets and maps. They all run in O(log(N)):
-
-  // Inserts an element into a set
-  [T] _insert_([T] set, T elt);
-
-  // Removes an element from a set
-  [T] _remove_([T] set, T elt);
-
-  // Inserts a key-value pair into a map
-  [K -> V] _put_([K -> V] map, K key, V value);
-
-  // Removes a key and its associated value from a map
-  [K -> V] _drop_([K -> V] map, K key);
+In the above example, {{accumulate(..)}} is a function that takes as input either a set or a relation, applies an integer function to all its elements (for a set) or arguments (for a relation) and returns the sum of the results. Just ignore it for now: we'll see how to implement it in the next chapter. Functions whose names start and end with an underscore (like {{_mod_(..)}}, {{_xor_(..)}}, {{_print_(..)}} and {{_bits_(..)}} above) are builtin functions. Builtin functions provide functionalities that are either impossible to implement directly in Cell, or that cannot be implemented efficiently, or that are just convenient to have as builtins for whatever reason. Some of them have aliases in the standard library. The {{&}} operator for sequences, for example, is defined in terms of {{_cat_(..)}} builtin function (doing so will enable an {<{<strong>O(1)</strong>}>} implementation of sequence concatenation that uses ropes instead of arrays as the underlying physical data structure). You can find a list of all builtin functions in the standard library documentation.
 
 
 Polymorphic functions

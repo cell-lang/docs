@@ -24,8 +24,8 @@ Accessing stored and computed data in a uniform way
 
 Mutable relation variables benefit from the same syntactic sugar that is available for ordinary relation values. Lookup operations of the form:
 
-  address(sid, !!)
-  unit_price(sid, pid, !!)
+  address(sid, !)
+  unit_price(sid, pid, !)
 
 can be rewritten more concisely like so:
 

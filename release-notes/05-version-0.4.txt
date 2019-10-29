@@ -2,13 +2,13 @@ Cell &#x279e; Java compiler version 0.4
 
 Version 0.4 of the Cell to Java code generator is now available. It's still a beta version, but it's a major milestone. In terms of features and optimization it's almost complete, in the sense that nearly everything that is planned for version 1.0 has now been implemented. The next release will finish the few minor features that are still missing (which for the most part are about improving the interface of the generated code and the usability of the compiler rather than the language itself) but apart from that all that separates this release from version 1.0 is just a lot of testing.
 
-The main goal of this release was optimizing the performance of relational automata. There's still a lot of work to do there, but I'm pleased to report that the results are already pretty good. You can read more about it {#{benchmarks-relational-link-2}#}.
+The main goal of this release was optimizing the performance of relational automata. There's still a lot of work to do there, but I'm pleased to report that the results are already pretty good. You can read more about it {<{<a href='benchmarks-relational.html'>here</a>}>}.
 
 There's also a number of features and changes that were originally planned for a later version, and that's part of the reason this release has been a bit late.
 
-For starters, there's an initial implementation of array mutability. It's a work in progress and it comes with a lot of restrictions, but it's now at least possible, with a bit of extra effort, to efficiently code at least some algorithms that would have previously been too slow. The details are in the {#{imperative-link}#} page.
+For starters, there's an initial implementation of array mutability. It's a work in progress and it comes with a lot of restrictions, but it's now at least possible, with a bit of extra effort, to efficiently code at least some algorithms that would have previously been too slow. The details are in the {<{<a href='imperative.html'>imperative code</a>}>} page.
 
-In the previous versions of the language sets and maps were implemented as sorted arrays, which meant that the only way to add or remove elements or key-value pairs was to rebuild from scratch the entire data structure. The language now combines sorted arrays and balanced trees to provide efficient, {{O(log(N))}} insertion and removal of elements or key-value pairs, using the following new builtin functions:
+In the previous versions of the language sets and maps were implemented as sorted arrays, which meant that the only way to add or remove elements or key-value pairs was to rebuild from scratch the entire data structure. The language now combines sorted arrays and balanced trees to provide efficient, {<{<strong>O(log(N))</strong>}>} insertion and removal of elements or key-value pairs, using the following new builtin functions:
 
   // Inserts an element into a set
   [T] _insert_([T] set, T elt);
@@ -126,4 +126,4 @@ which are faster and a lot less memory hungry, and can deal with large datasets.
 
 This release also brings a number of bug fixes.
 
-As already mentioned, the next release (0.5) will implement those few features that are still missing for version 1.0. Expect it in October, or November at the latest.
+As already mentioned, the next release (0.5) will implement those few features that are still missing for version 1.0. Expect it in October, or early November at the latest.

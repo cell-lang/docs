@@ -43,7 +43,7 @@ Say, for example, that you have a number of similar sensors, and you want, for e
 
   [T -> NzNat] increment_counters([T -> NzNat] ctrs, [T] incr_keys) {
     incr_ctrs = [if incr_keys(k) then nz_nat(k+1) else k : k, n <- ctrs];
-    new_ctrs = [k -> 1 : k <- incr_keys, not ctrs(k, *)];
+    new_ctrs = [k -> 1 : k <- incr_keys, not ctrs(k, _)];
     return incr_ctrs & new_ctrs;
   }
 

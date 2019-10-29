@@ -306,7 +306,6 @@ Message handlers have no way to invoke one another (or to put it another way, au
     update_value(value - 1);
   }
 
-
   Counter.reset {
     update_value(0);
   }
@@ -349,7 +348,7 @@ As already explained, automata are passive entities that can only receive but no
     super <- remove_user(id: this.id);
   }
 
-Just as before, {{Logins}} contains information about users who have logged in and the chat groups they've joined, while {{ChatServer}} keeps a list of the users who have connected to the server (a user here can be connected without being logged in: the steps of the process are connect -> login -> logout -> disconnect). Whenever a user disconnects from the server, it must be automatically logged out, and removed from all chat groups he's in. That's done by the {{super <- remove_user(id: this.id)}} statement inside the body of {{ChatServer.disconnect(..)}}. The general form of the statement is:
+Just as before, {{Logins}} contains information about users who have logged in and the chat groups they've joined, while {{ChatServer}} keeps a list of the users who have connected to the server (a user here can be connected without being logged in: the steps of the process are connect -> login -> logout -> disconnect). Whenever a user disconnects from the server, they must be automatically logged out, and removed from all chat groups they're in. That's done by the {{super <- remove_user(id: this.id)}} statement inside the body of {{ChatServer.disconnect(..)}}. The general form of the statement is:
 
   super <- message;
 

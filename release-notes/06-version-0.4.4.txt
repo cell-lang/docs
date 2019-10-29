@@ -6,4 +6,4 @@ The first one is a standard representation and syntactic sugar for characters, d
 
 The second one is the ability for a relational automaton to send messages to other automata it is wired to, which is explained in the chapter on {<{<a href='updates.html'>updates</a>}>}.
 
-Among the bug fixes one is especially important as it fixes a compiler crash in the presence of certain types of foreign keys, so if you're using any of the 0.4.X (with X < 4) versions you should should upgrade right away.
+Among the bug fixes one is especially important as it fixes a compiler crash in the presence of certain types of foreign keys, so if you're using any of the 0.4.X (with X < 4) versions you should upgrade right away.

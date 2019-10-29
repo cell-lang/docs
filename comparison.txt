@@ -1,6 +1,6 @@
 A comparison with OOP
 
-Note: if you haven't already, read the introductory {#{example-link}#} before reading this.
+Note: if you haven't already, read the introductory {<{<a href='example.html'>example</a>}>} before reading this.
 
 We're now going to re-implement the Cell code we saw in the previous chapter in Java, in order to get a better sense of the differences between the two programming paradigms, OOP and the functional/relational approach used in Cell. Were're not trying here to replicate more "advanced" features of Cell, like orthogonal persistence, transactions, or the ability to record and replay the execution of the application. We just want to show how they compare in terms of the usual metrics that we value as software engineers, things like simplicity, reliability, maintainability, overall development effort and so on.
 

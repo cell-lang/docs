@@ -11,7 +11,11 @@ The biggest issue one encounters when interfacing two languages as different as 
 
 {#{java/data-conversion.html}#}
 
-The above table should be mostly self-explanatory, except for the last entry: tagged types can be mapped directly to a Java type only if the tag is a known symbol and the type of the untagged value in turn has a direct mapping to a Java type. In this case, the tag is simply ignored and the mapping of the  untagged value is used. A type like {{<person_id(Int)>}}, for example, will be mapped to a {{long}} in Java, and the generated code will take care of adding or removing the {{person_id}} tag as needed.
+The first six entries in the above table are self-explanatory. The mapping for Cell sequences and sets is also straightforward, as both are mapped to Java arrays. For example, the Cell type {{Int*}} is mapped to {{long[]}} in Java, and {{[Date]}} is mapped to {{java.time.Date[]}}. The last three entries require a bit of an explanation.
+
+** Cell maps become instances of {{HashMap}} in Java, and the mapping is applied recursively to its parameters, just like with sequences or sets. For instance, {{[String -> Float*]}} is mapped to {{HashMap<String, double[]>}}. You need to be careful here though as {{HashMap}} works as intended only if the type of the key implements a meaningful {{hashCode()}} method. The Cell type {{[Int* -> String]}}, for example, will be mapped to {{HashMap<int[], String>}}, which is problematic since in Java two different arrays that happen to have the same content will generally have different hashcodes. Lookups will not work, and you might inadvertently insert duplicate keys in a {{HashMap}} instance.
+** Tagged types can be mapped directly to a Java type only if the tag is a known symbol. In this case, the tag is simply ignored and the mapping of the  untagged value is used. A type like {{<user_id(Int)>}}, for example, will be mapped to a {{long}} in Java, and the generated code will take care of adding or removing the {{user_id}} tag as needed.
+** The {{Maybe[T]}} type is mapped directly to the type of its parameter, and the value {{:nothing}} is mapped to {{null}}. {{Maybe[String]}}, for example, is mapped to {{String}}, and the value {{:just("Hello!")}} is returned as the Java string {{"Hello!"}}. Since primitive types are not nullable, they are replaced with the corresponding class types: {{Maybe[Int]}} for example, is mapped to {{Integer}}, and {{Maybe[Float]}} to {{Double}}.
 
 For data types that are not in the above table, the compiler tries to generate a Java class for them. It does so for symbols, tuples, records and union types. All the generated types are documented in the {{interface.txt}} file. As an example, given the following Cell code:
 
@@ -42,17 +46,7 @@ Finally, when any type of naming conflict arises, the compiler fixes it by addin
 
 Every generated type is declared in its own file, and of course there's nothing stopping you from replacing the generated classes with your own, as long as they have the same names, are part of the same {{net.cell_lang}} package, and you don't remove or change the type of its member variables. You can of course add all the member variables and methods you need, which will be ignored by the generated code. Just be careful because the Cell compiler will regenerate those classes every time, and will overwrite your own if they are in the wrong directory. The simplest thing to do is probably to delete the generated classes you want to replace right after running the Cell compiler, as part of the build process, and keep their replacements somewhere else in the {{CLASSPATH}}.
 
-When everything else fails, the exchange format depends on the direction data is moving in. When passing data from Java to Cell you're expected to pass a string that contains the textual representation of a Cell value. That's neither elegant nor particularly efficient, but at least it's simple and straightforward. When data moves in the other direction, from Cell to Java, it is returned as an object of type {{net.cell_lang.Value}}. Its declaration is shown here:
-
-{#{java/value.html}#}
-
-This interface is implemented by a number of concrete classes each of which is used to represent a particular type of Cell value: symbols, integers, floating point numbers, sequences, sets, binary and ternary relations and tagged values. These concrete classes are hidden from the user, and they can be manipulated only through their common "fat" interface, whose methods can be divided into three groups. The first one comprises all the {{boolean is*()}} methods, which are used to discover the type of the value represented by the target object. Then there's a group of methods that are used to actually access the data held by those objects:
-
-{#{java/value-methods.html}#}
-
-Each of these methods is actually implemented only in some of the classes that can hide behind the {{Value}} interface, and if used with the wrong concrete class they will throw an exception. {{long asLong()}}, for example, can only be used if the target object actually holds an integer value, which can be checked using the {{boolean isInt()}} query method.
-
-The last method, {{void print(Writer)}}, is used to generate the textual representation of the value, which is written to the provided {{java.io.Writer}} object.
+When everything else fails, values are passed back and forth as strings containing their standard textual representation. That's neither elegant nor particularly efficient, but when passing data from Java to Cell it's at least simple and straightforward, since generating those strings is usually trivial. In the other direction things are a bit more complicated, as you may have to parse those strings, and parsing is a lot more complex than printing. A Java library that will assist with that task will be provided soon, but remember that exchanging data in textual form is just a last resort, one that is very easy to avoid in practice.
 
 
 Relational automata
@@ -80,7 +74,14 @@ If the provided state is not a valid one, {{load(..)}} will throw an exception. 
 
 Errors handling works in the same way as with {{load(..)}}. If an error occurs an exception will be thrown, but the automaton will remain fully operational, and its state will be left untouched.
 
-The two methods {{value()}} and {{updates()}} are {{Counter}}-specific accessors that return the values of the {{value}} and {{updates}} member variables respectively. Note that the types of such variables is just {{Int}}, which can be mapped directly to {{long}} in Java, with no need to use {{net.cell_lang.Value}}.
+The next four methods, {{incr()}}, {{decr()}}, {{reset()}} and {{reset(long)}} provides another way to send messages to the automaton:
+
+  counter.incr();    // Same as counter.execute("incr");
+  counter.reset(-1); // Same as counter.execute("reset(-1)");
+
+They are a lot faster than {{execute(..)}}, and usually they're more convenient too. There are cases though when the ability to generically send a message of any type to an automaton is crucial, so that's why the compiler provides two ways of doing the same thing.
+
+The two methods {{value()}} and {{updates()}} are {{Counter}}-specific accessors that return the values of the {{value}} and {{updates}} member variables respectively. Note that the types of such variables is just {{Int}}, which can be mapped directly to {{long}} in Java.
 
 Accessors for member and mutable relation variables are not generated automatically: if you want them just use the {{-g}} flag when running the Cell compiler.
 
@@ -88,7 +89,7 @@ Let's now take a look at a more complex automaton, {{Supply}}. Here's the declar
 
 {#{java/supply.html}#}
 
-The first three methods, {{load(..)}}, {{save(..)}} and {{execute(..)}}, are the same as before. The next two (both named {{lowestPriceSuppliers(..)}}) are just the compiled Java version of the corresponding Cell methods of the {{Supply}} automaton.
+The first three methods, {{load(..)}}, {{save(..)}} and {{execute(..)}}, are the same as before. The next four ({{setAddress(..)}}, {{setPrice(..)}} and the two {{lowestPriceSuppliers(..)}}) are just the compiled Java version of the corresponding messages handlers or methods of the {{Supply}} automaton.
 
 Everything else is just automatically generated accessors for the data stored by the automaton. Again, they are generated only if you use the {{-g}} flag when compiling.
 
@@ -117,7 +118,7 @@ The first thing to note here is the two enumerations {{Input}} and {{Output}}, w
 
 {#{java/switch-client-A.html}#}
 
-As an alternative to {{setInput(..)}} and {{readOutput(..)}}, which can operate on any input or output and use the textual representation of a value or {{net.cell_lang.Value}} respectively as an exchange format, the generated class also provides another set of methods each of which can manipulate a single input or output, but that are more convenient to use in most cases. The above code snippet can be rewritten as follow:
+As an alternative to {{setInput(..)}} and {{readOutput(..)}}, which can operate on any input or output and use the textual representation of a value as an exchange format, the generated class also provides another set of methods each of which can manipulate a single input or output, but that are more convenient to use in most cases. The above code snippet can be rewritten as follow:
 
 {#{java/switch-client-B.html}#}
 

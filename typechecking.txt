@@ -120,9 +120,9 @@ We're now going to take a closer look at type variables and generic programming.
 
 {{concat(..)}} can of course concatenate sequences of any type, even when the two sequences contain values of different types. An expression like {{concat((0, 1, 2, 3), (:a, :b, :c))}} is perfectly legal, and when evaluated yields the value {{(0, 1, 2, 3, :a, :b, :c)}}. When the typechecker encounters a call to a generic function (that is, a function whose signature contains type variables) it needs to do two things: determine if its arguments are valid, and calculate the type of the returned value (which is also the type of the whole expression). To a first approximation, the first task is basically done by treating all type variables in the signature as if they were the type {{Any}}. In the case of {{concat(..)}}, it's as if the signature of the function had been written this way: {{Any* concat(Any*, Any*)}}. It gets a bit more complicated than that when dealing with closure arguments, but it's still pretty straightforward. In order to calculate the type of the expression, on the other hand, since the return type of {{concat(..)}} contains the type variable {{T}}, such variable must be somehow bound to an actual type, and the typechecker tries to determine the smallest type that can fit the actual arguments of the call. In the case of {{concat((0, 1, 2, 3), (:a, :b, :c))}}, {{T}} is bound to the type {{<<0..3>, a, b, c>}}, which is then replaced in the return type of the function, {{T*}}, yielding the final type for the overall expression: {{<<0..3>, a, b, c>*}}.
 
-This process seems straightforward enough, but there are a number of issues you need to be aware of. In the signature of {{concat(..)}} the type variable {{T}} appears twice, and the typechecker also ends up binding it twice, to {{<0..3>}} when unifying the type of the first argument, and to {{<a, b, c>}} when unifying the second, with the final binding being the union of the two: {{<<0..3>, a, b, c>}}. To see how this process can go wrong, say you wanted to define the operator {{[]}} for maps, as an alternative to the ugly (and temporary) map lookup operation {{map(key, !!)}} we saw earlier. With a nominative type system, it would be fine to write something like this:
+This process seems straightforward enough, but there are a number of issues you need to be aware of. In the signature of {{concat(..)}} the type variable {{T}} appears twice, and the typechecker also ends up binding it twice, to {{<0..3>}} when unifying the type of the first argument, and to {{<a, b, c>}} when unifying the second, with the final binding being the union of the two: {{<<0..3>, a, b, c>}}. To see how this process can go wrong, say you wanted to define the operator {{[]}} for maps, as an alias for the map lookup operation {{map(key, !)}} (or just {{map(key)}}). With a nominative type system, it would be fine to write something like this:
 
-  B (_[_])([A -> B] map, A key) = map(key, !!);
+  B (_[_])([A -> B] map, A key) = map(key);
 
 but in Cell doing so would actually loose you some type safety. The following code, for example, would typecheck, but it would always fail at runtime:
 
@@ -149,13 +149,13 @@ the compiler would happily accept your code, and the two above functions would n
 
 Incidentally, that's an example of how the line between sound and unsound (with respect to type checking) code may become a bit blurred in a structural type system. The {{containts_bad_example_?(..)}} functions are certainly buggy, but they don't actually cause a crash at runtime, so it's hard to say if they are type safe or not. The vast majority of all nominative type systems I know would have prevented the error in {{contains_bad_example_1(..)}}, but would have been powerless against the one in {{contains_bad_example_2(..)}}. Similar considerations apply to {{lookup_bad_example(..)}}, although in this latter case we are definitely closer to the "unsafe" end of the spectrum.
 
-All the above errors would have been caught if the native/primitive operators had been used instead. An expression like {{map(key, !!)}} is rejected if the type of {{key}} is not a subset of the type of the keys in {{map}}. The same goes for similar expressions like {{rel2(!!, y)}} or {{rel3(x, y, !!)}}. This criterion usually works fine, although in some cases it's a bit too restrictive. For example {{map(key, !!)}} would be rejected if the type of {{map}} were {{[Nat -> String]}} and the type of {{key}} were {{Int}}, since {{Int}} is not a subset of {{Nat}}, but that's a situation that can occur fairly often in perfectly valid code. Possible workarounds include changing the declared type of {{map}}, either by changing the function signature, or by using an explicit local variable declaration; doing a run-time type check (more on that later) to convince the type system that {{key}} is indeed non-negative; or just using a function like the operator {{[]}} above.
-In the case of membership test operators like {{set(elt)}} (and similar ones like {{map(key, *)}}) requiring the type of {{elt}} to be a subset of the type of the elements of {{set}} is just too restrictive. That's how it actually was in an earlier version of the language, but in the end that had to be changed as it turned out to be more trouble that it was worth. So now the typechecker expects the type of {{elt}} and that of the elements of {{set}} not to be disjoint: that seems in practice to be enough to catch the vast majority of errors, without placing any unnecessary burden on the developer.
+All the above errors would have been caught if the native/primitive operators had been used instead. An expression like {{map(key, !)}} is rejected if the type of {{key}} is not a subset of the type of the keys in {{map}}. The same goes for similar expressions like {{rel2(!, y)}} or {{rel3(x, y, !)}}. This criterion usually works fine, although in some cases it's a bit too restrictive. For example {{map(key, !)}} would be rejected if the type of {{map}} were {{[Nat -> String]}} and the type of {{key}} were {{Int}}, since {{Int}} is not a subset of {{Nat}}, but that's a situation that can occur fairly often in perfectly valid code. Possible workarounds include changing the declared type of {{map}}, either by changing the function signature, or by using an explicit local variable declaration; doing a run-time type check (more on that later) to convince the type system that {{key}} is indeed non-negative; or just using a function like the operator {{[]}} above.
+In the case of membership test operators like {{set(elt)}} (and similar ones like {{map(key, _)}}) requiring the type of {{elt}} to be a subset of the type of the elements of {{set}} is just too restrictive. That's how it actually was in an earlier version of the language, but in the end that had to be changed as it turned out to be more trouble that it was worth. So now the typechecker expects the type of {{elt}} and that of the elements of {{set}} not to be disjoint: that seems in practice to be enough to catch the vast majority of errors, without placing any unnecessary burden on the developer.
 
 
 Type refinement
 
-At any given time during the type checking process, the compiler keeps track of the "type" of each variable in scope. Such a type is just a superset of the set of possible values that particular variable can possibly hold at that particular time (always bear in mind that in a structural type system like Cell's a type is just a possibly infinite set of values that is know at compile time). This (superset of the) set of possible values is not fixed, and it changes every time a variable is assigned a new value, as this snipped of code shows:
+At any given time during the type checking process, the compiler keeps track of the "type" of each variable in scope. Such a type is just a superset of the set of possible values that particular variable can possibly hold at that particular time (always bear in mind that in a structural type system like Cell's a type is just a possibly infinite set of values that is know at compile time). This (superset of the) set of possible values is not fixed, and it changes every time a variable is assigned a new value, as shown by this code snippet:
 
   x = 5;
   // Here the "type" of x is <5..5>
@@ -190,11 +190,11 @@ where {{search_nested(..)}} is defined as follow:
 
 Incidentally, {{search_nested(..)}} is another example of a universal function, one that operates on values of any type and uses pattern matching to inspect and disassemble them. Inside the "then" branch of {{int_seqs(..)}} the compiler knows that {{value}} is of type {{Int*}}, that's why the function typechecks, while inside the "else" branch the typechecker uses the previous known type for {{value}}, in this case {{Any}}. In some cases, it would actually be useful if the compiler narrowed down the type of the variables in the "else" branch as well. The following function, for example, currently does not typecheck:
 
-  Nat abs(Int x) = if x :: Nat then x else -x; // DOES NOT TYPECHECK!!
+  Nat abs(Int x) = if x :: Nat then x else -x; // DOES NOT TYPECHECK!
 
 but it obviously should, since if we end up in the "else" branch {{x}} can only be negative. That will be implemented in a future version of the compiler.
 
-As a side note, a runtime type check like the {{value :: Int*}} above can be quite expensive, since unlike what happens with nominatively typed languages, in Cell the only way to find out if a sequence is a sequence of integers is to check each of its elements, one by one, to see if they are actual integers, and operation that takes O(n), where n is the length of the sequence. This process could be optimized in some special cases, but not in general, and in any case the compiler doesn't perform any optimizations at the moment.
+As a side note, a runtime type check like the {{value :: Int*}} above can be quite expensive, since unlike what happens with nominatively typed languages, in Cell the only way to find out if a sequence is a sequence of integers is to check each of its elements, one by one, to see if they are actual integers, and operation that takes {<{<strong>O(N)</strong>}>}, where {<{<strong>N</strong>}>} is the length of the sequence. This process could be optimized in some special cases, but not in general, and in any case the compiler doesn't perform any optimizations at the moment.
 
 Polymorphich boolean functions can also be used to perform run-time type checks, provided that they are defined in a very specific way. They are faster (at least in the current implementation), safer, work on both branches of the conditional expression or statement and look more natural. Here's how the {{Result[..]}} type is defined in the standard library, together with a few related functions:
 
@@ -343,7 +343,7 @@ or to change the type of one of the fields, {{station_id}}, by replacing the ori
   );
 
   WeatherMsrt3 wm_1_to_3(WeatherMsrt1 m, [String -> Nat] conv_table) = [
-    l -> if l == :station_id then conv_table(v, !!) else v : l, v <- m
+    l -> if l == :station_id then conv_table(v, !) else v : l, v <- m
   ];
 
 or maybe to delete the {{station_id}} field altogether, if a particular alphanumeric weather station identifier does not appear in the conversion table:
@@ -359,9 +359,9 @@ or maybe to delete the {{station_id}} field altogether, if a particular alphanum
 
   WeatherMsrt4 wm_1_to_4(WeatherMsrt1 m, [String -> Nat] conv_table) = [
     l -> if l == :station_id
-      then conv_table(v, !!)
+      then conv_table(v, !)
       else v
-    : l, v <- m, l != :station_id or conv_table(v, *)
+    : l, v <- m, l != :station_id or conv_table(v, _)
   ];
 
 or to rename a couple fields, {{temperature}} into {{temp_celsius}} and {{pressure}} into {{pressure_bars}}:

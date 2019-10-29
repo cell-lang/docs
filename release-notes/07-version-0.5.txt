@@ -1,0 +1,167 @@
+Cell &#x279e; Java compiler version 0.5
+
+Version 0.5 of the Cell to Java code generator is now available, and it's the first version that is meant for actual real-world use. It's still a beta version, but it's feature-complete in the sense that everything that was planned for version 1.0 has now been implemented, and the only thing that's missing now is just more testing.
+
+This release brings a number of syntactic changes, improvements to the interface of the generated code, better support for debugging, and a minimal standard library with documentation.
+
+
+Syntactic changes
+
+The first change is in the syntax of partial membership testing and lookups on relations and mutable relation variables:
+
+  // {{Partial membership testing:}}
+  Bool has_key([Any -> Any] map, Any key) = map(key, _);
+
+  // Used to be:
+  //   Bool has_key([Any -> Any] map, Any key) = map(key, *);
+  // The asterisk has been replaced by an underscore
+
+  // {{Lookups:}}
+  V lookup([K -> V] map, K key, V default) =
+    if map(k, _) then map(k, !) else default;
+
+  // Used to be:
+  //   V lookup([K -> V] map, K key, V default) =
+  //     if map(k, *) then map(k, !!) else default;
+  // The double exclamation mark has been replaced by a single one
+
+There have been changes to set/relation comprehension expressions:
+
+  // {{Iterating over a binary or ternary relation:}}
+  [X -> Z] map_values([X -> Y] map, (X -> Z) f) =
+    [x -> f(y) : x y <- map];
+
+  // Used to be:
+  //   [X -> Z] map_values([X -> Y] map, (X -> Z) f) =
+  //     [x -> f(y) : x, y <- map];
+  // The comma between the two iteration variable, {{x}} and {{y}}, is now gone
+
+  // {{Iterating over a sequence:}}
+  [X] seq_to_set(X* xs) = [x : x <- xs];
+
+  // Used to be:
+  //   [X] seq_to_set(X* xs) = [x : x <~ xs];
+  // The wavy arrow {{<~}} has been replaced by a normal one
+
+  // {{Destructuring iterator over a sequence of tuples:}}
+  [(Y, X)] seq_to_flipped_set((X, Y)* xys) =
+    [(y, x) : (x, y) <- xys];
+
+  // Used to be:
+  //   [(Y, X)] seq_to_flipped_set((X, Y)* xys) =
+  //     [(y, x) : x, y <~ xys];
+  // The wavy arrow has been replaced by a normal one, and
+  // the destructuring variables are now enclosed in parentheses
+
+There have also been changes to for loops that iterate over binary or ternary relations:
+
+  Int sum_of_prods([Int, Int] r) {
+    res = 0;
+    for x y <- r
+      res = res + x * y;
+    return res;
+  }
+
+  // Used to be:
+  //   Int sum_of_prods([Int, Int] r) {
+  //     res = 0;
+  //     for x, y <- r
+  //       res = res + x * y;
+  //     return res;
+  //   }
+  // The comma between the two iteration variable, {{x}} and {{y}}, is now gone
+
+Note that the syntax for iterating over a sequence of tuples has {<{<strong>not</strong>}>} changed:
+
+  Int sum_of_prods((Int, Int)* seq) {
+    res = 0;
+    for x, y <- r // When destructuring a tuple the comma is still required
+      res = res + x * y;
+    return res;
+  }
+
+When iterating through a sequence of tuples or a relation you can now also replace variables you aren't going to use with an underscore, with both comprehension expressions and for loops:
+
+  B* middle((A, B, C)* seq) = (y : _, y, _ <- seq);
+
+  [K] keys([K -> V] map) = [k : k _ <- map];
+
+  Float right_col_prod([Any, Float] r) {
+    prod = 1.0;
+    for _ x <- r
+      prod = prod * x;
+    return prod;
+  }
+
+and the same goes for destructuring assignments:
+
+  A left((A, B) pair) {
+    a, _ = pair;
+    return a;
+  }
+
+
+Interface of generated code
+
+There have been two main sets of improvements to the interface of the generated classes. The first one is that each message handler is now mapped its own specific method. For example, given the following automaton:
+
+  schema Counter {
+    value : Int = 0;
+  }
+
+  Counter.increment {
+    set value = value + 1;
+  }
+
+  Counter.decrement {
+    set value = value - 1;
+  }
+
+  Counter.reset {
+    set value = 0;
+  }
+
+  Counter.set(value: Int) {
+    set value = this.value;
+  }
+
+the interface of the generated Java class now looks like this:
+
+{#{java/counter-interface-new.html}#}
+
+The last four methods allow you to invoke each of the message handlers directly, whereas previously you could only call them using the generic {{execute(..)}} method:
+
+  counter.increment();  // Same as counter.execute("increment");
+  counter.set(-1);      // Same as counter.execute("set(-1)");
+
+These handler-specific methods are a lot faster and often more convenient. The generic {{execute(..)}} method is still there though, since there are times when the ability to generically send messages of any type is crucial.
+
+The second improvement is in the mapping of Cell types to Java types. The Cell types {{Date}}, {{Time}}, {{[K -> V]}} are now mapped directly to {{java.time.LocalDate}}, {{java.time.LocalDateTime}} and {{java.util.HashMap}}. Moreover, the {{Maybe}} type now gets some special treatment too: a type like {{Maybe[String]}}, for example, is now mapped directly to the Java {{String}} class, and the value {{nothing}} is mapped to the Java {{null}}.
+
+As part of this redesign the old {{net.cell_lang.Value}} has been eliminated, and now any type that the compiler fails to map to an ad-hoc Java type is returned in textual form. That can make in some cases the generated classes less convenient to use, but since with every new release the use of {{net.cell_lang.Value}} had become increasingly rare, I felt it just wasn't worth keeping around. In the future a small Java library will be provided for those rare cases where you need to parse the returned data.
+
+Check the {<{<a href='interface-java.html'>interfacing with Java</a>}>} page for all the details.
+
+
+Debugging relational automata
+
+When a message handler fails, it's now possible to figure out what caused the failure, which was very hard to do in previous releases. For that purpose, a new builtin procedure, {{Error(..)}}, is provided, which takes as argument an automaton instance and returns a {{String}} that explains the cause of the failure of the last message handler to execute. Here's an example:
+
+  // {{ok}} is true if the message handler succeeded, false otherwise
+  ok = automaton <- message;
+
+  if not ok {
+    // The last message handler failed. {{Error(..)}} returns
+    // a string that describes the cause of the failure.
+    err = Error(automaton);
+
+    // Printing the error message
+    Print(err);
+  }
+
+You can find the details in the {<{<a href='using-relational.html'>using relational automata</a>}>} page.
+
+
+Standard library
+
+The core standard library is now documented {<{<a href='standard-library.html'>here</a>}>}. The library is minimal at the moment, and its documentation is still in a pretty rough form, but both will be gradually expanded and improved in the coming months.

@@ -1,7 +1,7 @@
 An overview of Cell
 
 The purpose of this section is to provide a bird's eye view of the Cell programming language, by emphasizing its unique features and explaining how it differs from every other programming language I know, in order to give you a sense of what it can be useful for.
-Be warned though that this overview is not for the faint of heart: it's long, abstract and contains no code. If you are just curious to find out what the language looks like and what it can be used for, start with the introductory {#{example-link}#} instead. Another useful resource is the {#{faq-link}#}.
+Be warned though that this overview is not for the faint of heart: it's long, abstract and contains no code. If you are just curious to find out what the language looks like and what it can be used for, start with the introductory {<{<a href='example.html'>example</a>}>} instead. Another useful resource is the {<{<a href='faq.html'>FAQ</a>}>}.
 
 
 The functional sublanguage
@@ -13,7 +13,7 @@ The most distinctive feature of the functional subset of the language is its dat
 
 Relational automata
 
-The core construct of Cell is relational automata. To a first approximation, think of them as fully programmable miniature databases. Their ability to use relations to encode their own state is by far the most consequential feature provided by the language: we will not be saying much about it here, as this topic is so important that it deserves to be discussed extensively, and with plenty of examples, once we have a full picture of the language. We'll do so in the {#{relations-link}#} page. Suffice it to say for now that relations, with some help from reactive programming and memoization, can simplify (drastically, in some cases) both the data structures used to encode the state of an application and the code that updates them.
+The core construct of Cell is relational automata. To a first approximation, think of them as fully programmable miniature databases. Their ability to use relations to encode their own state is by far the most consequential feature provided by the language: we will not be saying much about it here, as this topic is so important that it deserves to be discussed extensively, and with plenty of examples, once we have a full picture of the language. We'll do so in the {<{<a href='relations.html'>Why relations are better than objects</a>}>} page. Suffice it to say for now that relations, with some help from reactive programming and memoization, can simplify (drastically, in some cases) both the data structures used to encode the state of an application and the code that updates them.
 
 Relations in Cell are very different from those of SQL databases: for one thing, their fields can contain any type of values, unlike in SQL where they are limited to a few predefined data types; for another, they are designed to be used in a fully reduced form, whereby the majority of relations will be either unary, binary or ternary, with higher-arity relations used less often. In practice, these differences lead to a very different sort of data modeling, and allow, I believe, for a better integration with general-purpose programming capabilities. In a way, Cell's flavor of the relational model looks a bit like a sort of high-level version of the Entity/Component architecture commonly used in videogames. There are many similarities in the physical implementation as well, and there will be even more in the future.
 

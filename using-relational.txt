@@ -47,8 +47,11 @@ In order to see how to use relational automata, we'll write a tiny command line 
     // Sending all messages in the list
     for msg @ i <- msg_list {
       ok = instance <- msg;
-      if not ok
+      if not ok {
         Print("Message number " & _print_(i) & " failed\n");
+        err_msg = Error(instance);
+        Print(err_msg & "\n");
+      }
     }
 
     // Saving the final state
@@ -91,6 +94,12 @@ The state of any automaton can be set at any time, any number of times. It's jus
   ok = instance <- msg;
 
 Here too the variable {{ok}} indicates whether the message was processed successfully. Also note the {{msg_list :: CounterMsg*}} check, which is required to verify that whatever data was loaded from the input file was indeed a valid sequence of messages for {{Counter}}.
+
+When a message handler fails, you may need to figure out what went wrong. That's what the {{Error(..)}} builtin procedure is for:
+
+  err_msg = Error(instance);
+
+{{Error}} takes as argument an automaton instance, and returns a string explaining why the last update failed (if the last message was handled successfully, it just returns the empty string). An update can fail either because the corresponding message handler threw an exception during its execution, or because it violated an integrity constraint (a key or foreign key). In the first case the string returned by {{Error(..)}} will simply contain the stack trace at the time the exception was thrown, but in the second one it will show which key or foreign key was violated, and the tuples that violated it. Be warned though that at the moment this feature is a bit buggy: the argument of the tuples may be in the wrong order, and their values may be incomplete. For example, in some cases a tuple of the form {{user_id(3012), "ed86"}} may be printed out as {{"ed86", 3102}}. That's still good enough for debugging purposes though, as long as you're aware of the problem.
 
 The last instruction we have to manipulate relational automata is used to take a snapshot of the state of an automaton instance:
 
