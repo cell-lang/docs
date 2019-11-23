@@ -1,0 +1,101 @@
+Date and time functions
+
+Date and time functions are in the {<{<a href='https://github.com/cell-lang/compiler/blob/master/src/stdlib/time.cell'>time.cell</a>}>} file, which defines one type:
+
+  type Weekday = monday,
+                 tuesday,
+                 wednesday,
+                 thursday,
+                 friday,
+                 saturday,
+                 sunday;
+
+and the following functions:
+
+  // Builds a {{Date}} value corresponding to the given day, month and year
+  // and returns it wrapped in a {{Maybe}}. Returns {{nothing}} if the
+  // given day/month/year combination is not valid
+  // date(2019, 5, 30) {{->}} just(`2016-05-30`)
+  // date(2019, 2, 29) {{->}} nothing
+  Maybe[Date] date(Int year, Int month, Int day)
+
+  // Returns year, month and day corresponding to a given {{Date}}
+  // year_month_day(`2016-05-30`) {{->}} (2016, 5, 30)
+  (Int, Int, Int) year_month_day(Date)
+
+  // Returns whether the given year is a leap year
+  // is_leap_year(2000) {{->}} true
+  // is_leap_year(2019) {{->}} false
+  Bool is_leap_year(Int year)
+
+  // Returns the day of the week corresponding to a given {{Date}}
+  // weekday(`2019-05-30`) {{->}} thursday
+  Weekday weekday(Date)
+
+  // Builds a {{Time}} value corresponding to a given date and
+  // time of the day. Returns {{nothing}} if the time of the
+  // day is not valid
+  // time(`1970-01-01`, 12, 30, 15, 500000000) == `1970-01-01 12:30:15.5`
+  Maybe[Time] time(
+    Date date,
+    Int  hours,
+    Int  minutes,
+    Int  seconds,
+    Int  nanoseconds
+  )
+
+  // Accessors for the component of a {{Time}} value
+
+  // day(`1970-01-01 12:30:15.5`) == `1970-01-01`
+  Date day(Time)
+
+  // hour(`1970-01-01 12:30:15.5`) == 12
+  <0..23> hour(Time)
+
+  // minute(`1970-01-01 12:30:15.5`) == 30
+  <0..59> minute(Time)
+
+  // second(`1970-01-01 12:30:15.5`) == 15
+  <0..59> second(Time)
+
+  // nanosec(`1970-01-01 12:30:15.5`) == 500000000
+  <0..999999999> nanosec(Time)
+
+
+Sorting
+
+Sorting functions are in the {<{<a href='https://github.com/cell-lang/compiler/blob/master/src/stdlib/sorting.cell'>sorting.cell</a>}>} file:
+
+  // Sorts a sequence in ascending order. The type of the
+  // elements of the sequence must implement the {{Ord}} protocol
+  Ord* sort(Ord*)
+
+  // Sorts a sequence in ascending order, according to the
+  // comparison function provided as second argument
+  T* sort(T*, (T T -> Bool))
+
+  // Faster version of sort(..) for sequences of integers
+  Int* sorti(Int*)
+
+  // Faster version of sort(..) for sequences of floating point numbers
+  Float* sortf(Float*)
+
+
+UTF-8
+
+UTF-8 functions are in the {<{<a href='https://github.com/cell-lang/compiler/blob/master/src/stdlib/utf-8.cell'>utf-8.cell</a>}>} file:
+
+  // Encodes a sequence of unicode characters in UTF-8 format.
+  // Returns {{nothing}} if any number in the sequence is not a valid
+  // unicode code point, that is, if it's not in range [0, 1114111]
+  // utf8_encode(untag("测试")) {{->}} just((230, 181, 139, 232, 175, 149))
+  // utf8_encode((27979, 35797)) {{->}} just((230, 181, 139, 232, 175, 149))
+  Maybe[Byte*] utf8_encode(Nat*)
+
+  // Decodes a sequence of unicode characters encoded in UTF-8 format
+  // If the sequence of bytes in not a valid UTF-8 encoding of a
+  // sequence of unicode code points, returns the index of the first
+  // invalid byte in the input
+  // utf8_decode((230, 181, 139, 232, 175, 149)) {{->}} success((27979, 35797))
+  // utf8_decode((230, 181, 139, 175, 149)) {{->}} failure(3)
+  Result[Nat*, Nat] utf8_decode(Byte*)

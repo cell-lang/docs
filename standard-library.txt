@@ -1,6 +1,6 @@
 Standard library
 
-The standard library right now consists of a single file, {<{<a href='https://github.com/cell-lang/compiler/blob/master/src/stdlib/prelude.cell'>prelude.cell</a>}>}, which is required even for the most trivial programs.
+This page contains the documentation for the most important file in the standard library, {<{<a href='https://github.com/cell-lang/compiler/blob/master/src/stdlib/prelude.cell'>prelude.cell</a>}>}, which is required even for the most trivial programs. Documentation for the rest of the standard library can be found {<{<a href='standard-library-miscellanea.html'>here</a>}>}.
 
 The prelude defines a number of basic data types shown here:
 
@@ -298,7 +298,7 @@ The prelude contains also a bunch of functions to work with the {{Maybe[T]}} and
   // Checks whether a {{Result[V, E]}} value is of the form {{success(..)}}
   // The way this function is defined allows the compiler to narrow
   // down the type of the argument if this function is used in the
-  // condition of a {{if}} expression or statement
+  // condition of an {{if}} expression or statement
   True  succeeded(Success[T]) = true;
   False succeeded(Failure[T]) = false;
 

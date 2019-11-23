@@ -41,6 +41,5 @@ The Cell compiler is free and open source software, and all source code is avail
 
 News
 
+24 Nov 2019: Version 0.5.2 of {<{<a href='java-code-generator-0.5.X.html'>Cell &#x279e; Java compiler</a>}>} released.
 30 Sep 2019: Version 0.5 of {<{<a href='java-code-generator-0.5.html'>Cell &#x279e; Java compiler</a>}>} released.
-13 Aug 2019: Version 0.4.4 of {<{<a href='java-code-generator-0.4.4.html'>Cell &#x279e; Java compiler</a>}>} released.
-23 Jul 2019: Version 0.4 of {<{<a href='java-code-generator-0.4.html'>Cell &#x279e; Java compiler</a>}>} released.

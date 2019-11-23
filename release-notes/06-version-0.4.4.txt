@@ -1,9 +1,0 @@
-Cell &#x279e; Java compiler version 0.4.4
-
-Version 0.4.4 of the Cell to Java code generator is now available. It brings a number of bug fixes and a couple new features.
-
-The first one is a standard representation and syntactic sugar for characters, dates and time. The details are explained in the {<{<a href='data.html'>data</a>}>} chapter.
-
-The second one is the ability for a relational automaton to send messages to other automata it is wired to, which is explained in the chapter on {<{<a href='updates.html'>updates</a>}>}.
-
-Among the bug fixes one is especially important as it fixes a compiler crash in the presence of certain types of foreign keys, so if you're using any of the 0.4.X (with X < 4) versions you should upgrade right away.
