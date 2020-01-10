@@ -93,11 +93,9 @@ Builtin function technically don't belong to {{prelude.cell}}, but they're discu
   // {{* (long long *) & x}} in {{C}} if {{x}} is of type double
   Int _bits_(Float x)
 
-  // Mantissa of a floating point number
-  Int _mantissa_(Float)
-
-  // Decimal exponent of a floating point number
-  Int _dec_exp_(Float)
+  // Rounds a floating point number towards zero
+  // to the nearest integer
+  Int _round_(Float x)
 
 A second group are used to efficiently manipulate sets and maps. Their time complexity is {<{<strong>O(log(N))</strong>}>}, where {<{<strong>N</strong>}>} is the size of the input set or map:
 
