@@ -182,7 +182,7 @@ As you would expect, that's only syntactic sugar for the following relations:
   joined_on(UserId, GroupId, Date) [key: 0:1];
 
   // User #0 has karma #2 in chat group #1
-  karma(UserId, GroupId, Date) [key: 0:1];
+  karma(UserId, GroupId, Int) [key: 0:1];
 
 The comment that precedes the declaration of each relation is the informal relation predicate, that is, the informal meaning of each entry in the relation, with {{#0}}, {{#1}} and {{#2}} being the placeholders for the first, second and third argument of the relation respectively.
 
